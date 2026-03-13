@@ -1,243 +1,323 @@
+
+Writing task3 chat route · TS
+Copy
+
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { WRITING_TASK2, Topic } from "../../writing/writing-task2-descriptors";
-import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
-
+import { WRITING_TASK3, TopicOption } from "../../writing/writing-task3-descriptors";
+ 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
+ 
 type Message = {
   role: "assistant" | "user";
   content: string;
 };
-
-
+ 
+ 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOPIC SELECTION
+// TOPIC HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-
-function pickRandomTopic(): Topic {
-  const idx = Math.floor(Math.random() * WRITING_TASK2.topics.length);
-  return WRITING_TASK2.topics[idx];
+ 
+function pickRandomTopics(tier: TopicOption["tier"], n: number): TopicOption[] {
+  const pool = WRITING_TASK3.topicOptions.filter((t) => t.tier === tier);
+  const shuffled = pool.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n);
 }
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WRITING PROMPT SELECTION
-// ─────────────────────────────────────────────────────────────────────────────
-
-function pickWritingPrompt(topic: Topic, task1Level: string): string {
-  const high = ["B2", "B2+", "C1"];
-  const mid  = ["A2+", "B1", "B1+"];
-  if (high.includes(task1Level)) return topic.writingPrompts.high;
-  if (mid.includes(task1Level))  return topic.writingPrompts.mid;
-  return topic.writingPrompts.low;
+ 
+function pickSwitchTopic(tier: TopicOption["tier"], excludeId?: string): TopicOption {
+  const pool = WRITING_TASK3.topicOptions.filter(
+    (t) => t.tier === tier && t.id !== excludeId
+  );
+  return pool[Math.floor(Math.random() * pool.length)];
 }
-
-
+ 
+ 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCAFFOLD CONVERSATION PROMPT
+// CONVERSATION PROMPT BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
-
-function buildScaffoldPrompt(topic: Topic, candidateName: string, task1Level: string): string {
-  return `You are an AI examiner for the AZE Writing Test — Task 2: ${WRITING_TASK2.meta.title}.
-
-THIS IS THE SCAFFOLDING PHASE. It is NOT assessed. Your job is to warm the candidate up on the topic before they write.
-
-The candidate's name is: ${candidateName || "the candidate"}
-Their estimated level from Task 1: ${task1Level || "unknown"}
-
-TODAY'S TOPIC: ${topic.label}
-${topic.scaffoldSeed}
-
-YOUR RULES:
-1. Use the candidate's name naturally — you already know it, don't ask for it again.
-2. ONE question per turn. Short and chat-like.
-3. Maximum 2 sentences per turn.
-4. Be warm and encouraging — this is preparation, not testing.
-5. Keep questions simple and directly about the topic.
-6. Do NOT assess or judge their writing. This is just a warm-up conversation.
-7. Stay on the topic: ${topic.label}. Do not drift.
-8. After ${WRITING_TASK2.meta.scaffoldingExchanges} exchanges, naturally wrap up and signal they are ready to write.
-
-QUESTION QUALITY:
-- SHORT and DIRECT. No implied context.
-- At lower levels (A1–A2): aim for short questions, usually under 10–12 words. Natural is more important than strict word count.
-- At higher levels: maximum 15 words. Still one clear question.
-- If they mention something specific, ask directly about that thing.
-- Encourage the candidate to recall a specific example or experience related to the topic — this prepares them for the writing task.
-- Do not ask yes/no questions. Ask questions that prompt a short story, memory, or description.
-
-At the end of EVERY response, add:
-<done>true</done> — if scaffolding is complete and they should move to writing
-<done>false</done> — if scaffolding should continue`;
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DIAGNOSIS PROMPT
-// ─────────────────────────────────────────────────────────────────────────────
-
-function buildDiagnosisPrompt(): string {
-  const macroBlock = WRITING_TASK2.levelClusters
+ 
+function buildLevelBlock(): string {
+  return WRITING_TASK3.levelClusters
     .map((cluster) => {
       const macros = cluster.macroIds
         .map((id) => {
-          const m = WRITING_TASK2.azeMacro.find((macro) => macro.azeId === id);
+          const m = WRITING_TASK3.azeMacro.find((macro) => macro.azeId === id);
           if (!m) return "";
-          const signalList = m.signals.map((s) => `      - ${s}`).join("\n");
-          return (
-            `  ${m.azeId} (${cluster.label}, ${m.fn}): ${m.claim}\n` +
-            `    Signals:\n${signalList}` +
-            (m.notes ? `\n    Note: ${m.notes}` : "")
-          );
+          const sigList = m.signals.map((s) => `      - ${s}`).join("\n");
+          return `  ${m.azeId} (${cluster.label}, ${m.fn}): ${m.claim}\n    Signals:\n${sigList}`;
         })
         .filter(Boolean)
         .join("\n\n");
-
-      return (
-        `── ${cluster.label} — Threshold: ${cluster.confirmThreshold}/${cluster.totalMacros} CAN to confirm ──\n` +
-        `${cluster.levelDescription}\n\n${macros}`
-      );
+      return `── ${cluster.label} — Threshold: ${cluster.confirmThreshold}/${cluster.totalMacros} ──\n${cluster.levelDescription}\n\n${macros}`;
     })
     .join("\n\n");
-
-  return `You are a CEFR assessment specialist. You are scoring a candidate's extended written response from Writing Task 2: Inform & Narrate.
-
+}
+ 
+function buildConversationPrompt(
+  chosenTopic: TopicOption,
+  switchTopic: TopicOption | null,
+  prevLevel: string
+): string {
+  const levelBlock = buildLevelBlock();
+  const activeTopic = switchTopic ?? chosenTopic;
+ 
+  return `You are an AI examiner for the AZE Writing Test — Task 3: Express & Argue.
+ 
+YOUR ROLE: You are a debate partner. Your job is to get the candidate to express opinions and argue/justify them in writing. You challenge, push for reasons, introduce counter-perspectives, and ask them to defend their position.
+ 
+This is NOT a friendly chat. This is a structured debate. Warm but persistent.
+ 
+═══ CANDIDATE CONTEXT ═══
+ 
+Estimated level from previous tasks: ${prevLevel}
+${switchTopic
+  ? `CURRENT TOPIC (switched): ${activeTopic.label}\nQuestion: ${activeTopic.prompt}`
+  : `CHOSEN TOPIC: ${chosenTopic.label}\nQuestion: ${chosenTopic.prompt}`
+}
+ 
+═══ RULES ═══
+ 
+1. ONE question or challenge per turn. Never ask two things.
+2. Maximum 2 sentences per turn.
+3. Be warm but persistent — like a good teacher who pushes.
+4. When they give an opinion, challenge it using one of the challenge types below.
+5. If they defend well, push harder with a deeper challenge.
+6. If they struggle, simplify your challenge or rephrase.
+7. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
+8. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
+9. If the candidate struggles on TWO consecutive challenges at the same functional level, you have found their ceiling. Stop pushing up.
+ 
+═══ CHALLENGE TYPES — USE VARIETY ═══
+ 
+Do not repeat the same challenge type. Rotate through these:
+• Ask for a reason — "Why do you think that?"
+• Ask for an example — "Can you give an example?"
+• Introduce a counter-view — "But some people would say..."
+• Question a limitation — "But does that always apply?"
+• Ask them to compare perspectives — "How would someone on the other side see this?"
+• Ask them to respond to criticism — "What would you say to someone who disagrees because...?"
+ 
+Match challenge complexity to the candidate's level:
+- A1–A2: "Do you like X or Y?" / "Why?" / "But some people think..."
+- A2+–B1: "What do you think about X?" / "But what about the other side?" / "Can you give an example?"
+- B1+: "But doesn't that ignore..." / "What would you say to someone who thinks..."
+- B2+: "That assumes..." / "But from another perspective..."
+- C1: "Could you be more precise about..." / "How would you respond to the criticism that..."
+ 
+═══ TOPIC SWITCH RULE ═══
+ 
+Switch topic only when the candidate has:
+• stated a clear opinion
+• given at least one reason
+• responded meaningfully to at least one challenge
+• maintained their position across more than one turn
+ 
+${switchTopic
+  ? `The topic has ALREADY been switched to: ${switchTopic.label}. Continue probing on this topic.`
+  : `When all four conditions above are met: say "OK, let me ask you about something different." Then introduce the switch topic. Signal readiness with <switch_ready>true</switch_ready>.`
+}
+ 
+═══ LEVEL GUIDE ═══
+ 
+${levelBlock}
+ 
+═══ DONE SIGNAL ═══
+ 
+At the end of EVERY response, add:
+<ceiling>true</ceiling> — you believe you've found the candidate's ceiling
+<ceiling>false</ceiling> — you want to keep probing
+ 
+If you think the candidate is ready for a topic switch (conditions met, not yet switched), add:
+<switch_ready>true</switch_ready>
+Otherwise omit this tag.`;
+}
+ 
+ 
+// ─────────────────────────────────────────────────────────────────────────────
+// DIAGNOSIS PROMPT
+// ─────────────────────────────────────────────────────────────────────────────
+ 
+const diagnosisMacroBlock = WRITING_TASK3.levelClusters
+  .map((cluster) => {
+    const macros = cluster.macroIds
+      .map((id) => {
+        const m = WRITING_TASK3.azeMacro.find((macro) => macro.azeId === id);
+        if (!m) return "";
+        const sigList = m.signals.map((s) => `      - ${s}`).join("\n");
+        return `  ${m.azeId} (${cluster.label}, ${m.fn}): ${m.claim}\n    Signals:\n${sigList}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+    return `── ${cluster.label} — Threshold: ${cluster.confirmThreshold}/${cluster.totalMacros} CAN to confirm ──\n${macros}`;
+  })
+  .join("\n\n");
+ 
+const diagnosisPrompt = `You are a CEFR assessment specialist. You are analysing a candidate's written chat from Writing Task 3: Express & Argue.
+ 
 ═══ CONTEXT ═══
-
-The candidate wrote an extended response to a prompt. This is a WRITING test.
-Task goal: Inform & Narrate.
-
-Task 2 tests two functions:
-
-INFORMING involves:
-- providing factual information
-- describing situations, people, or things
-- explaining what something is or how it works
-
-NARRATING involves:
-- recounting past events or experiences
-- describing sequences of actions
-- telling what happened first, next, and after
-
-These two functions can blur — keep their definitions distinct when scoring.
-
+ 
+The candidate had a written debate with an AI examiner. The AI challenged their opinions and pushed them to justify their views. You are assessing the candidate's messages only.
+ 
+Task 3 tests two functions:
+- EXPRESSING: Can the candidate state and develop opinions in writing?
+- ARGUING: Can the candidate justify, defend, and reason in writing?
+ 
+The conversation may have covered multiple topics (familiar → broader → abstract).
 The topic is irrelevant to scoring — assess FUNCTION, not content.
-Do not reward creativity, interesting opinions, or topic knowledge. Only score communicative function in writing.
-Macros are topic-agnostic: the same macro applies whether writing about a holiday, a job, or a friend.
-
-═══ RELEVANCE CHECK ═══
-
-Before scoring, check: is the response clearly related to the prompt?
-If the response is entirely unrelated to the prompt — meaning there is clearly no attempt to address it (e.g. copy-paste, nonsense, random text) — score ALL macros as NOT_YET and note this in rationale. Do not trigger this rule for weak, messy, or partially relevant responses. Those should be scored normally.
-
-═══ LENGTH CHECK ═══
-
-If the response is extremely short (fewer than ~3 meaningful sentences), assume insufficient evidence for mid- and higher-level macros. Only basic lower-level macros may be scored CAN from minimal responses.
-
+Do not reward interesting opinions, creativity, or topic knowledge. Score communicative function only.
+ 
+═══ CRITICAL SCORING PRINCIPLE ═══
+ 
+Score what the candidate DEMONSTRATED — not what the topic was about.
+Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied by what was demonstrated.
+ 
+═══ NOT_TESTED RULE ═══
+ 
+NOT_TESTED should only be used when the conversation clearly had no opportunity to demonstrate the function.
+If the conversation created the opportunity but the candidate did not demonstrate the function, score NOT_YET — not NOT_TESTED.
+ 
 ═══ MACROS TO ASSESS ═══
-
-${macroBlock}
-
+ 
+${diagnosisMacroBlock}
+ 
 ═══ SCORING RULES ═══
-
-1. CAN = clear evidence in the writing that the candidate achieved this communicative function.
-2. NOT_YET = the writing attempted this function but did not achieve it clearly, or there is no evidence.
-3. NOT_TESTED = use ONLY when the task prompt clearly did not allow this function to appear. If the prompt allowed it but the candidate did not demonstrate it, score NOT_YET — not NOT_TESTED.
-4. Be conservative: mixed or ambiguous evidence = NOT_YET.
-5. A single clear instance under appropriate communicative demand may be sufficient for CAN. However, treat very short or minimal evidence cautiously — one accidental sentence is not sufficient.
+ 
+1. CAN = clear evidence in the writing that the candidate achieved this function.
+2. NOT_YET = the writing attempted this function but did not achieve it clearly, or no evidence exists.
+3. NOT_TESTED = use only when no opportunity to demonstrate the function existed (use sparingly).
+4. Be conservative: mixed evidence = NOT_YET.
+5. A single clear instance under appropriate communicative demand may be sufficient for CAN. Treat minimal evidence cautiously.
 6. Multiple weak instances do NOT combine into CAN.
-7. Clear higher-level competence may support lower-level CAN judgements, but only when the lower-level function is a necessary prerequisite of what the candidate demonstrated.
-8. Score EVERY macro. Do not skip any.
-
+7. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied.
+ 
+IMPORTANT: Score EVERY macro. The system calculates the level from your scores.
+ 
+ 
+═══ CONFIDENCE LEVEL ═══
+ 
+For each macro judgement assign a confidence level:
+ 
+HIGH — clear, direct evidence of the function under appropriate communicative demand.
+MEDIUM — some evidence is present but limited in length, complexity, or clarity.
+LOW — evidence is weak, indirect, or borderline.
+ 
+Confidence reflects the strength of the evidence, not the CEFR level.
+ 
 ═══ OUTPUT FORMAT ═══
-
-Respond ONLY with valid JSON, no other text:
+ 
+Respond ONLY with valid JSON:
 {
   "results": [
     {
-      "azeId": "W2-F1",
-      "claim": "Can produce simple factual statements in writing",
+      "azeId": "W3-F1",
+      "claim": "Can state a like, dislike, or simple preference",
       "level": "A1",
-      "fn": "Informing",
-      "result": "CAN|NOT_YET|NOT_TESTED",
+      "fn": "Expressing",
+      "result": "CONFIRMED|NOT_DEMONSTRATED|NOT_TESTED",
+      "confidence": "HIGH|MEDIUM|LOW",
       "rationale": "Short explanation (1 sentence)",
-      "evidence": "Direct quote from the writing"
+      "evidence": "Direct quote from the transcript"
     }
   ]
 }`;
-}
-
-
+ 
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // LANGUAGE ANALYSIS PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
-
-const languageAnalysisPrompt = buildLanguageAnalysisPrompt("extended");
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SCORE MAPPING
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SCORE_MAP: Record<string, number> = {
-  "A1":  2,
-  "A2":  4,
-  "A2+": 5,
-  "B1":  6,
-  "B1+": 7,
-  "B2":  8,
-  "B2+": 9,
-  "C1":  10,
-};
-
-function levelToScore(label: string): number {
-  return SCORE_MAP[label] ?? 1;
-}
-
-
+ 
+const languageAnalysisPrompt = `You are a CEFR-trained language analyst. Analyse the candidate's written messages from a debate/argument task.
+ 
+═══ CONTEXT ═══
+ 
+The candidate had a written debate with an AI. Assess the language quality of the candidate's messages only. Ignore the AI examiner's messages entirely.
+ 
+═══ DIMENSIONS ═══
+ 
+For each dimension, provide a CEFR band, descriptor, and 1-2 examples:
+ 
+1. GRAMMAR (Range & Accuracy) — structures used, accuracy, control
+2. VOCABULARY (Range & Precision) — breadth, appropriacy, precision of argumentative language
+3. COHERENCE & COHESION — logical flow, linking, argument structure
+4. SPELLING & MECHANICS — accuracy, impact on communication
+5. COMMUNICATIVE EFFECTIVENESS — does the writing achieve its argumentative purpose?
+ 
+═══ OUTPUT FORMAT ═══
+ 
+Respond ONLY with valid JSON:
+{
+  "overallFormLevel": "B1",
+  "overallFormSummary": "2-sentence summary",
+  "dimensions": [
+    {
+      "dimension": "Grammar",
+      "level": "B1",
+      "descriptor": "One sentence",
+      "examples": ["quote 1", "quote 2"]
+    }
+  ]
+}`;
+ 
+ 
 // ─────────────────────────────────────────────────────────────────────────────
 // API HANDLER
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json();
     const {
       action,
       messages,
       exchangeCount,
-      topic: topicFromClient,
-      candidateName,
+      wrapUp,
+      chosenTopicId,
+      switchTopicId,
       task1Level,
-      writingResponse,
-    } = await req.json();
-
-    const topic: Topic = topicFromClient ?? pickRandomTopic();
-
-
-    // ── Scaffold chat turn ─────────────────────────────────────────────────
-    if (action === "scaffold") {
-      const scaffoldPrompt = buildScaffoldPrompt(topic, candidateName || "", task1Level || "");
-      let prompt = scaffoldPrompt;
-
+      task2Level,
+    } = body;
+ 
+    // ── Get topic choices ──────────────────────────────────────────────
+    if (action === "get-topics") {
+      const choices = pickRandomTopics(
+        "familiar",
+        WRITING_TASK3.principles.familiarTopicsShownToCandidate
+      );
+      return NextResponse.json({ choices });
+    }
+ 
+ 
+    // ── Conversation turn ──────────────────────────────────────────────
+    if (action === "chat") {
+      const prevLevel = task2Level || task1Level || "unknown";
+ 
+      const chosenTopic =
+        WRITING_TASK3.topicOptions.find((t) => t.id === chosenTopicId) ??
+        WRITING_TASK3.topicOptions.find((t) => t.tier === "familiar")!;
+ 
+      const switchTopic = switchTopicId
+        ? WRITING_TASK3.topicOptions.find((t) => t.id === switchTopicId) ?? null
+        : null;
+ 
+      const conversationPrompt = buildConversationPrompt(chosenTopic, switchTopic, prevLevel);
+      let prompt = conversationPrompt;
+ 
       if (exchangeCount === 0) {
         prompt +=
-          `\n\nThis is the START. Greet ${candidateName || "the candidate"} by name and ask the first ` +
-          `warm-up question about the topic. Ask about a specific memory or experience — not a yes/no question. ` +
-          `Keep it short and friendly. Add <done>false</done>.`;
-      } else if (exchangeCount >= WRITING_TASK2.meta.scaffoldingExchanges - 1) {
+          `\n\nThis is the START. Introduce the topic warmly and ask their opinion: ` +
+          `"${chosenTopic.prompt}" — keep it short and chat-like. Keep the first question concrete and easy to answer.`;
+      } else if (wrapUp) {
         prompt +=
-          `\n\nThis is the final scaffolding exchange. Wrap up warmly in 1 sentence and ` +
-          `tell them they are ready to write. Add <done>true</done>.`;
+          "\n\nThis is the final exchange. Thank the candidate briefly in 1 sentence. " +
+          "Add <ceiling>true</ceiling>.";
       } else {
         prompt +=
-          `\n\nThis is scaffolding exchange ${exchangeCount}. Ask ONE short, direct follow-up ` +
-          `question about ${topic.label}. Prompt them to recall a specific detail, moment, or experience. ` +
-          `Stay on topic. Add <done>false</done>.`;
+          `\n\nThis is exchange ${exchangeCount} of up to ${WRITING_TASK3.meta.maxExchanges}. ` +
+          `Challenge their last response using one of the challenge types. Prefer a different challenge type from the previous turn unless repetition is necessary for repair.`;
       }
-
+ 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
@@ -246,40 +326,52 @@ export async function POST(req: NextRequest) {
         ],
         max_tokens: 150,
       });
-
+ 
       const rawMessage = response.choices[0].message.content || "";
-
-      const doneMatch = rawMessage.match(/<done>(true|false)<\/done>/);
-      const scaffoldDone = doneMatch ? doneMatch[1] === "true" : false;
-
+ 
+      const ceilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
+      const ceilingReached = ceilingMatch ? ceilingMatch[1] === "true" : false;
+ 
+      const switchReadyMatch = rawMessage.match(/<switch_ready>true<\/switch_ready>/);
+      const switchReady = !!switchReadyMatch;
+ 
       const aiMessage = rawMessage
-        .replace(/<done>(true|false)<\/done>/g, "")
+        .replace(/<ceiling>(true|false)<\/ceiling>/g, "")
+        .replace(/<switch_ready>true<\/switch_ready>/g, "")
         .trim();
-
-      const writingPrompt = pickWritingPrompt(topic, task1Level || "A1");
-
-      return NextResponse.json({ message: aiMessage, scaffoldDone, topic, writingPrompt });
-    }
-
-
-    // ── Diagnose extended writing ──────────────────────────────────────────
-    if (action === "diagnose") {
-      if (!writingResponse) {
-        return NextResponse.json({ error: "No writing response provided" }, { status: 400 });
+ 
+      let nextSwitchTopic: TopicOption | null = null;
+      if (switchReady && !switchTopicId) {
+        const switchTier = switchTopic?.tier === "broader" ? "abstract" : "broader";
+        nextSwitchTopic = pickSwitchTopic(switchTier, chosenTopicId);
       }
-
+ 
+      return NextResponse.json({
+        message: aiMessage,
+        ceilingReached,
+        switchReady,
+        switchTopic: nextSwitchTopic,
+      });
+    }
+ 
+ 
+    // ── Diagnosis ──────────────────────────────────────────────────────
+    if (action === "diagnose") {
+      const transcript = (messages || [])
+        .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
+        .join("\n");
+ 
+      const candidateOnly = (messages || [])
+        .filter((m: Message) => m.role === "user")
+        .map((m: Message) => m.content)
+        .join("\n");
+ 
       const [functionRes, formRes] = await Promise.all([
         openai.chat.completions.create({
           model: "gpt-4o",
           messages: [
-            { role: "system", content: buildDiagnosisPrompt() },
-            {
-              role: "user",
-              content:
-                `Topic: ${topic.label}\n\n` +
-                `Writing prompt given: ${pickWritingPrompt(topic, task1Level || "A1")}\n\n` +
-                `Candidate's response:\n\n${writingResponse}`,
-            },
+            { role: "system", content: diagnosisPrompt },
+            { role: "user", content: `Here is the full transcript:\n\n${transcript}` },
           ],
           max_tokens: 4000,
           temperature: 0.1,
@@ -288,29 +380,26 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o",
           messages: [
             { role: "system", content: languageAnalysisPrompt },
-            {
-              role: "user",
-              content: `Candidate's writing:\n\n${writingResponse}`,
-            },
+            { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
           ],
           max_tokens: 2000,
           temperature: 0.1,
         }),
       ]);
-
+ 
       const funcRaw = functionRes.choices[0].message.content || "";
       const funcCleaned = funcRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
+ 
       const formRaw = formRes.choices[0].message.content || "";
       const formCleaned = formRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
+ 
       try {
         const diagnosis = JSON.parse(funcCleaned);
-
+ 
         const resultsMap = new Map(
           (diagnosis.results || []).map((r: { azeId: string; result: string }) => [r.azeId, r])
         );
-
+ 
         let calculatedLevel = "Below A1";
         const levelResults: {
           level: string;
@@ -318,11 +407,11 @@ export async function POST(req: NextRequest) {
           canCount: number;
           threshold: string;
         }[] = [];
-
-        for (const lc of WRITING_TASK2.levelClusters) {
+ 
+        for (const lc of WRITING_TASK3.levelClusters) {
           const canCount = lc.macroIds.filter((id) => {
             const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CAN";
+            return r && (r as { result: string }).result === "CONFIRMED";
           }).length;
           const confirmed = canCount >= lc.confirmThreshold;
           levelResults.push({
@@ -333,19 +422,17 @@ export async function POST(req: NextRequest) {
           });
           if (confirmed) calculatedLevel = lc.label;
         }
-
+ 
         diagnosis.diagnosedLevel = calculatedLevel;
         diagnosis.levelResults = levelResults;
-        diagnosis.score = levelToScore(calculatedLevel);
-        diagnosis.topic = topic;
-
+ 
         let formAnalysis = null;
         try {
           formAnalysis = JSON.parse(formCleaned);
         } catch {
           console.error("Failed to parse form analysis:", formCleaned);
         }
-
+ 
         return NextResponse.json({ diagnosis, formAnalysis });
       } catch {
         return NextResponse.json(
@@ -354,11 +441,11 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-
+ 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
-
   } catch (error) {
-    console.error("Writing Task 2 API error:", error);
+    console.error("Writing Task 3 API error:", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }
+ 

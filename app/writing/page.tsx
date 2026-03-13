@@ -32,7 +32,8 @@ type TaskConfig = {
 
 type MacroResult = {
   azeId: string; claim: string; level: string; fn: string;
-  result: "CAN" | "NOT_YET" | "NOT_TESTED"; rationale: string; evidence: string;
+  result: "CONFIRMED" | "NOT_DEMONSTRATED" | "NOT_TESTED"; rationale: string; evidence: string;
+  confidence?: "HIGH" | "MEDIUM" | "LOW";
 };
 
 type LevelResult = { level: string; confirmed: boolean; canCount: number; threshold: string };
@@ -1033,7 +1034,7 @@ export default function WritingTestPage() {
     return (
       <>
         <nav className="results-nav">
-          <div className="results-nav-logo">AZE <em>Writing Test</em></div>
+          <div className="results-nav-logo">FEAT <em>Writing Test</em></div>
           <div className="results-nav-tag">{taskLabel}</div>
         </nav>
         <header className="results-hero animate-fade-up">
@@ -1083,8 +1084,8 @@ export default function WritingTestPage() {
                     {isExp && <div className="macro-list">{macros.map(({ macro, result }) => {
                       if (!macro) return null;
                       const v = result?.result ?? "NOT_TESTED";
-                      const tc = v === "CAN" ? "can" : v === "NOT_YET" ? "not-yet" : "not-tested";
-                      return (<div key={macro.azeId} className="macro-item"><div className="macro-top-row"><span className={`verdict-tag ${tc}`}>{v === "CAN" ? "CAN" : v === "NOT_YET" ? "NOT YET" : "—"}</span><div style={{ flex: 1 }}><div className="macro-claim-text">{macro.claim}</div><div className="macro-meta"><span className="macro-fn-tag">{macro.fn}</span><span className="macro-id-tag">{macro.azeId}</span></div></div></div>{result?.rationale && <p className="macro-rationale">{result.rationale}</p>}{result?.evidence && <p className="macro-evidence">&ldquo;{result.evidence}&rdquo;</p>}</div>);
+                      const tc = v === "CONFIRMED" ? "can" : v === "NOT_DEMONSTRATED" ? "not-yet" : "not-tested";
+                      return (<div key={macro.azeId} className="macro-item"><div className="macro-top-row"><span className={`verdict-tag ${tc}`}>{v === "CONFIRMED" ? "Confirmed" : v === "NOT_DEMONSTRATED" ? "Not Demonstrated" : "—"}</span>{result?.confidence && <span style={{ fontSize: ".5rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", padding: "2px 6px", borderRadius: "4px", marginTop: "2px", marginLeft: "4px", background: result.confidence === "HIGH" ? "rgba(45,106,79,.1)" : result.confidence === "MEDIUM" ? "rgba(245,158,11,.1)" : "rgba(156,163,175,.1)", color: result.confidence === "HIGH" ? "var(--can)" : result.confidence === "MEDIUM" ? "var(--amber)" : "var(--muted)" }}>{result.confidence}</span>}<div style={{ flex: 1 }}><div className="macro-claim-text">{macro.claim}</div><div className="macro-meta"><span className="macro-fn-tag">{macro.fn}</span><span className="macro-id-tag">{macro.azeId}</span></div></div></div>{result?.rationale && <p className="macro-rationale">{result.rationale}</p>}{result?.evidence && <p className="macro-evidence">&ldquo;{result.evidence}&rdquo;</p>}</div>);
                     })}</div>}
                   </div>
                 );
@@ -1143,14 +1144,14 @@ export default function WritingTestPage() {
         <div className="phone-frame">
           <div className="phone-status-bar"><div className="phone-notch" /></div>
           <div className="chat-top-bar">
-            <div className="chat-avatar">AZE</div>
+            <div className="chat-avatar">FT</div>
             <div className="chat-top-info"><h2>{label}</h2><span>{subtitle}</span></div>
             <div className="chat-progress-wrap"><span className="chat-progress-label">Progress</span><div className="chat-progress-bar"><div className="chat-progress-fill" style={{ width: `${progressPct}%` }} /></div></div>
           </div>
           {notice && <div className="scaffolding-notice">{notice}</div>}
           <div className="chat-body">
-            {messages.map((m, i) => (<div key={i}><div className={`msg-row ${m.role}`}>{m.role === "assistant" && <div className="msg-avatar-sm">AZE</div>}<div className={`msg-bubble ${m.role}`}>{m.content}</div></div><div className="msg-time">{getTime(i)}</div></div>))}
-            {processing && <div className="typing-row"><div className="msg-avatar-sm">AZE</div><div className="typing-bubble"><span className="dot"/><span className="dot"/><span className="dot"/></div></div>}
+            {messages.map((m, i) => (<div key={i}><div className={`msg-row ${m.role}`}>{m.role === "assistant" && <div className="msg-avatar-sm">FT</div>}<div className={`msg-bubble ${m.role}`}>{m.content}</div></div><div className="msg-time">{getTime(i)}</div></div>))}
+            {processing && <div className="typing-row"><div className="msg-avatar-sm">FT</div><div className="typing-bubble"><span className="dot"/><span className="dot"/><span className="dot"/></div></div>}
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
@@ -1188,7 +1189,7 @@ export default function WritingTestPage() {
   if (phase === "landing") return wrap(
     <main className="landing-container">
       <header className="landing-header animate-fade-up">
-        <div className="landing-logo">AZE <em>Writing Test</em><div className="landing-logo-sub">ES World · Assessment Development · Feb 2026</div></div>
+        <div className="landing-logo">FEAT <em>Writing Test</em><div className="landing-logo-sub">Functional Evidence-based Assessment Tool · ES World · Feb 2026</div></div>
         <h1 className="landing-title">Testing Communicative <em>Function</em>,<br/>Not Genre</h1>
         <p className="landing-subtitle">A new approach to writing assessment that measures what candidates can do with language — not whether they know the conventions of a particular text type.</p>
       </header>
@@ -1202,7 +1203,7 @@ export default function WritingTestPage() {
         <div className="landing-card">
           <div className="landing-card-icon">✅</div>
           <h3>The Function-Based Alternative</h3>
-          <p>AZE tests communicative functions directly — can you inform, narrate, argue, explain? These functions exist in every genre. A candidate who can inform clearly does so whether they&apos;re writing an email, a chat message, or a report. We test the function, not the wrapper.</p>
+          <p>FEAT tests communicative functions directly — can you inform, narrate, argue, explain? These functions exist in every genre. A candidate who can inform clearly does so whether they&apos;re writing an email, a chat message, or a report. We test the function, not the wrapper.</p>
         </div>
         <div className="landing-card">
           <div className="landing-card-icon">🎯</div>
@@ -1614,7 +1615,7 @@ export default function WritingTestPage() {
     return wrap(
       <main className="report-page">
         <nav className="report-nav">
-          <div className="report-nav-logo">AZE <em>Writing Test</em></div>
+          <div className="report-nav-logo">FEAT <em>Writing Test</em></div>
           <div className="report-nav-tag">Final Report</div>
         </nav>
 

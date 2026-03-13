@@ -293,7 +293,7 @@ function buildDiagnosisPrompt(): string {
 
   return `You are a CEFR assessment specialist. You have observed a Writing Task 1 text chat conversation (Diagnostic Chat).
 
-Your task: Analyse the transcript and produce a CAN / NOT_YET / NOT_TESTED verdict for each AZE macro descriptor.
+Your task: Analyse the transcript and determine whether each communicative function was CONFIRMED, NOT DEMONSTRATED, or NOT TESTED.
 
 ═══ CONTEXT ═══
 
@@ -314,9 +314,9 @@ ${diagnosisMacroBlock}
 
 ═══ SCORING RULES ═══
 
-1. CAN = clear, unambiguous evidence the candidate achieved this function IN WRITING.
-2. NOT_YET = no evidence, weak evidence, or clear struggle.
-3. NOT_TESTED = conversation never created conditions to test this macro. Use sparingly — if the stage ran and the candidate did not demonstrate the function, score NOT_YET.
+1. CONFIRMED = clear, unambiguous evidence the candidate achieved this communicative function in writing.
+2. NOT_DEMONSTRATED = insufficient evidence that the candidate achieved this communicative function during the task.
+3. NOT_TESTED = the conversation never created conditions to test this function. Use sparingly — if the stage ran and the candidate did not demonstrate the function, score NOT_DEMONSTRATED.
 4. Be conservative: mixed or ambiguous evidence = NOT_YET.
 5. A single clear instance under appropriate demand IS sufficient for CAN.
 6. Multiple weak instances do NOT combine into CAN.
@@ -324,6 +324,17 @@ ${diagnosisMacroBlock}
 8. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied by the performance.
 
 IMPORTANT: Score EVERY macro. Do not skip any.
+
+
+═══ CONFIDENCE LEVEL ═══
+
+For each macro judgement assign a confidence level:
+
+HIGH — clear, direct evidence of the function under appropriate communicative demand.
+MEDIUM — some evidence is present but limited in length, complexity, or clarity.
+LOW — evidence is weak, indirect, or borderline.
+
+Confidence reflects the strength of the evidence, not the CEFR level.
 
 ═══ OUTPUT FORMAT ═══
 
@@ -335,7 +346,8 @@ Respond ONLY with valid JSON, no other text:
       "claim": "Can exchange basic personal info in writing",
       "level": "Pre-A1",
       "fn": "Interactional",
-      "result": "CAN|NOT_YET|NOT_TESTED",
+      "result": "CONFIRMED|NOT_DEMONSTRATED|NOT_TESTED",
+      "confidence": "HIGH|MEDIUM|LOW",
       "rationale": "Short explanation (1 sentence)",
       "evidence": "Direct quote or paraphrase from transcript"
     }
@@ -480,7 +492,7 @@ export async function POST(req: NextRequest) {
         for (const lc of WRITING_TASK1.levelClusters) {
           const canCount = lc.macroIds.filter((id) => {
             const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CAN";
+            return r && (r as { result: string }).result === "CONFIRMED";
           }).length;
           const confirmed = canCount >= lc.confirmThreshold;
           levelResults.push({
