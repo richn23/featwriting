@@ -3,11 +3,13 @@
 //
 // PURE CONFIG. No API routes. No OpenAI calls. No UI components.
 //
-// CHANGES v2:
-//   • Topic pool added (30 topics across 4 categories)
-//   • Probes replaced with probe GUIDANCE — what function to elicit, not fixed questions
-//   • Opening anchor (name + daily life) separated from diverging topic
-//   • Topic type added to WritingTask1Config
+// This is the writing test equivalent of descriptors.ts (speaking Task 1).
+// Same architecture: GSE micros → AZE macros → level clusters → thresholds.
+//
+// Sources:
+//   • GSE Writing LO Functional Analysis (205 functional descriptors)
+//   • AZE Writing Test Macro-Buckets DRAFT (Feb 2026)
+//   • AZE Writing Test Stakeholder Pages (Feb 2026)
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -28,8 +30,6 @@ export type FunctionType = "Interactional" | "Informing";
 
 export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
 
-export type TopicCategory = "personal" | "daily_life" | "experiences" | "preferences";
-
 export interface GseMicro {
   id: string;
   gse: number;
@@ -43,8 +43,6 @@ export interface AzeMacro {
   fn: FunctionType;
   level: CefrLevel;
   microIds: string[];
-  // What communicative function to elicit at this level.
-  // NOT fixed questions — the AI generates topic-appropriate questions from these.
   probeGuidance: string[];
   notes?: string;
 }
@@ -61,11 +59,7 @@ export interface LevelCluster {
 }
 
 export interface Topic {
-  id: string;
   label: string;
-  category: TopicCategory;
-  // What the AI should ask about when this topic is selected.
-  // Used to generate level-appropriate questions on this theme.
   seedPrompt: string;
 }
 
@@ -85,13 +79,11 @@ export interface WritingTask1Config {
     textInputOnly: boolean;
     aiDrivesConversation: boolean;
     stopAfterConsecutiveNotYet: number;
-    openingAnchor: string;
-    topicDivergesAfterExchange: number;
   };
-  topics: Topic[];
   gseMicro: GseMicro[];
   azeMacro: AzeMacro[];
   levelClusters: LevelCluster[];
+  topics: Topic[];
 }
 
 
@@ -106,9 +98,8 @@ const meta: WritingTask1Config["meta"] = {
   maxExchanges: 12,
   description:
     "WhatsApp-style chat where AI probes up/down to find the candidate's " +
-    "writing level. 5–8 exchanges. Opens with name + daily life anchor, " +
-    "then diverges into a randomly assigned topic. Tests written interaction " +
-    "and baseline informing. Everyone takes this task. Duration: 3–4 minutes.",
+    "writing level. 5–8 exchanges. Tests written interaction and baseline " +
+    "informing. Everyone takes this task. Duration: 3–4 minutes.",
 };
 
 
@@ -124,276 +115,64 @@ const principles: WritingTask1Config["principles"] = {
   textInputOnly: true,
   aiDrivesConversation: true,
   stopAfterConsecutiveNotYet: 2,
-  // Always start with name + where they're from + what they do
-  openingAnchor: "name, country/city, work or studies",
-  // After this exchange number, switch to the assigned topic
-  topicDivergesAfterExchange: 2,
 };
 
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 4. TOPIC POOL (30 topics)
-//
-// The route picks one at random per session.
-// Topics satisfy: LOW knowledge requirement + HIGH language potential.
-// Avoid: politics requiring knowledge, technical fields, academic subjects.
-//
-// Opening (exchanges 1–2) is always the anchor: name + daily life.
-// The assigned topic kicks in from exchange 3 onwards.
-// ═════════════════════════════════════════════════════════════════════════════
-
-const topics: Topic[] = [
-
-  // ── Personal (8 topics) ────────────────────────────────────────────────
-  {
-    id: "hobbies",
-    label: "Hobbies",
-    category: "personal",
-    seedPrompt: "Ask about what the candidate enjoys doing in their free time. What hobbies do they have? How long have they done this? Do they do it alone or with others?",
-  },
-  {
-    id: "family",
-    label: "Family",
-    category: "personal",
-    seedPrompt: "Ask about the candidate's family. How many people? Where do they live? What do family members do? Do they spend much time together?",
-  },
-  {
-    id: "home",
-    label: "Where they live",
-    category: "personal",
-    seedPrompt: "Ask about the candidate's home or neighbourhood. What is it like? What do they like or dislike about where they live?",
-  },
-  {
-    id: "work-studies",
-    label: "Work or studies",
-    category: "personal",
-    seedPrompt: "Ask about what the candidate does for work or study. What do they do? Do they enjoy it? What is a typical day like?",
-  },
-  {
-    id: "languages",
-    label: "Learning languages",
-    category: "personal",
-    seedPrompt: "Ask about the candidate's experience with languages. Which languages do they speak? How did they learn English? Do they find it difficult?",
-  },
-  {
-    id: "friends",
-    label: "Friends",
-    category: "personal",
-    seedPrompt: "Ask about the candidate's friendships. How do they spend time with friends? How did they meet their closest friends? What do they like doing together?",
-  },
-  {
-    id: "free-time",
-    label: "Free time",
-    category: "personal",
-    seedPrompt: "Ask what the candidate does when they have free time. How much free time do they have? What do they usually do? What is their ideal free day?",
-  },
-  {
-    id: "daily-routine",
-    label: "Daily routine",
-    category: "personal",
-    seedPrompt: "Ask about the candidate's typical day. When do they wake up? What do they do in the morning, afternoon, evening? Do they have a strict routine or is it flexible?",
-  },
-
-  // ── Daily Life (8 topics) ──────────────────────────────────────────────
-  {
-    id: "food",
-    label: "Food and cooking",
-    category: "daily_life",
-    seedPrompt: "Ask about food. Does the candidate cook? What do they like to eat? Is there a dish they make often or a favourite restaurant they enjoy?",
-  },
-  {
-    id: "exercise",
-    label: "Exercise and health",
-    category: "daily_life",
-    seedPrompt: "Ask about the candidate's relationship with exercise or staying healthy. Do they play sport? Go to the gym? How important is this to them?",
-  },
-  {
-    id: "weekend",
-    label: "Weekends",
-    category: "daily_life",
-    seedPrompt: "Ask about what the candidate typically does at weekends. Is it different from weekdays? Do they have plans for this weekend?",
-  },
-  {
-    id: "shopping",
-    label: "Shopping",
-    category: "daily_life",
-    seedPrompt: "Ask about the candidate's shopping habits. Do they prefer shopping online or in shops? What do they buy most? Do they enjoy shopping?",
-  },
-  {
-    id: "transport",
-    label: "Getting around",
-    category: "daily_life",
-    seedPrompt: "Ask how the candidate gets around. Do they drive? Use public transport? Walk or cycle? How long does their commute take?",
-  },
-  {
-    id: "technology",
-    label: "Technology use",
-    category: "daily_life",
-    seedPrompt: "Ask about how the candidate uses technology day to day. Which apps or devices do they use most? How has technology changed their daily life?",
-  },
-  {
-    id: "social-media",
-    label: "Social media",
-    category: "daily_life",
-    seedPrompt: "Ask about the candidate's use of social media. Which platforms do they use? How much time do they spend on it? What do they use it for?",
-  },
-  {
-    id: "music",
-    label: "Music",
-    category: "daily_life",
-    seedPrompt: "Ask about music. What kind of music does the candidate like? Do they play an instrument? When do they listen to music most?",
-  },
-
-  // ── Experiences (7 topics) ─────────────────────────────────────────────
-  {
-    id: "last-holiday",
-    label: "Last holiday",
-    category: "experiences",
-    seedPrompt: "Ask about the candidate's last holiday or trip. Where did they go? What did they do? What was the best or worst part?",
-  },
-  {
-    id: "favourite-place",
-    label: "A favourite place",
-    category: "experiences",
-    seedPrompt: "Ask the candidate about a place that is special to them. Where is it? Why do they like it? When did they last go there?",
-  },
-  {
-    id: "recent-event",
-    label: "Something that happened recently",
-    category: "experiences",
-    seedPrompt: "Ask the candidate about something that happened to them recently. Something interesting, surprising, or memorable. What happened? How did they feel?",
-  },
-  {
-    id: "learning-skill",
-    label: "Learning a new skill",
-    category: "experiences",
-    seedPrompt: "Ask if the candidate has ever learned something new — a skill, hobby, or subject. How did they learn it? Was it difficult? Are they still doing it?",
-  },
-  {
-    id: "celebration",
-    label: "A celebration or special occasion",
-    category: "experiences",
-    seedPrompt: "Ask about a celebration or special occasion the candidate has attended or organised. What was it? Who was there? What made it memorable?",
-  },
-  {
-    id: "difficult-moment",
-    label: "A challenge they faced",
-    category: "experiences",
-    seedPrompt: "Ask the candidate about a challenge or difficult moment they experienced. What happened? How did they deal with it? What did they learn?",
-  },
-  {
-    id: "travel-plans",
-    label: "Future travel plans",
-    category: "experiences",
-    seedPrompt: "Ask the candidate if they have any travel plans. Where would they like to go? Why? What would they do there?",
-  },
-
-  // ── Preferences (7 topics) ─────────────────────────────────────────────
-  {
-    id: "city-countryside",
-    label: "City vs countryside",
-    category: "preferences",
-    seedPrompt: "Ask the candidate whether they prefer city life or countryside life. Why? What are the good and bad things about where they live now?",
-  },
-  {
-    id: "online-inperson",
-    label: "Online vs in-person",
-    category: "preferences",
-    seedPrompt: "Ask whether the candidate prefers doing things online or in person — shopping, socialising, working. What are the advantages and disadvantages for them?",
-  },
-  {
-    id: "reading-watching",
-    label: "Reading vs watching",
-    category: "preferences",
-    seedPrompt: "Ask whether the candidate prefers reading books or watching films/TV. What do they read or watch? Why do they prefer one over the other?",
-  },
-  {
-    id: "working-hours",
-    label: "Working hours and lifestyle",
-    category: "preferences",
-    seedPrompt: "Ask about the candidate's preferred working style. Do they prefer to start early or late? Work from home or an office? Do they separate work from personal life?",
-  },
-  {
-    id: "indoor-outdoor",
-    label: "Indoor vs outdoor activities",
-    category: "preferences",
-    seedPrompt: "Ask whether the candidate prefers indoor or outdoor activities in their free time. What do they enjoy most? Does this change with the weather or season?",
-  },
-  {
-    id: "alone-together",
-    label: "Alone vs with others",
-    category: "preferences",
-    seedPrompt: "Ask whether the candidate prefers spending time alone or with other people. Are they more introverted or extroverted? When do they need time alone?",
-  },
-  {
-    id: "planning-spontaneous",
-    label: "Planning vs being spontaneous",
-    category: "preferences",
-    seedPrompt: "Ask whether the candidate prefers planning things carefully or being spontaneous. Can they give an example of when each worked well or went wrong?",
-  },
-];
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-// 5. GSE MICRO DESCRIPTORS (evidence layer — unchanged)
+// 4. GSE MICRO DESCRIPTORS (evidence layer)
 // ═════════════════════════════════════════════════════════════════════════════
 
 const gseMicro: GseMicro[] = [
 
   // ── Pre-A1 (GSE 10–21) ──────────────────────────────────────────────────
-  { id: "wgse-10-i-1", gse: 10, fn: "Informing",      text: "Can write their name, address and nationality." },
-  { id: "wgse-16-x-1", gse: 16, fn: "Interactional",  text: "Can post simple online greetings, using basic formulaic expressions and emoticons." },
-  { id: "wgse-20-i-1", gse: 20, fn: "Informing",      text: "Can give personal information in written form (e.g. name, nationality, age, address)." },
+  { id: "wgse-10-i-1", gse: 10, fn: "Informing", text: "Can write their name, address and nationality." },
+  { id: "wgse-16-x-1", gse: 16, fn: "Interactional", text: "Can post simple online greetings, using basic formulaic expressions and emoticons." },
+  { id: "wgse-20-i-1", gse: 20, fn: "Informing", text: "Can give personal information in written form (e.g. name, nationality, age, address)." },
 
   // ── A1 (GSE 22–29) ──────────────────────────────────────────────────────
-  { id: "wgse-25-i-1", gse: 25, fn: "Informing",      text: "Can write short sentences about things people have." },
-  { id: "wgse-27-i-1", gse: 27, fn: "Informing",      text: "Can write short, simple sentences about their family, where they live and what they do." },
-  { id: "wgse-29-i-1", gse: 29, fn: "Informing",      text: "Can write short sentences to describe familiar objects." },
-  { id: "wgse-25-x-1", gse: 25, fn: "Interactional",  text: "Can write very simple personal messages (e.g. thanks, sorry)." },
-  { id: "wgse-27-x-1", gse: 27, fn: "Interactional",  text: "Can write a few sentences about themselves (e.g. family, interests)." },
+  { id: "wgse-25-i-1", gse: 25, fn: "Informing", text: "Can write short sentences about things people have." },
+  { id: "wgse-27-i-1", gse: 27, fn: "Informing", text: "Can write short, simple sentences about their family, where they live and what they do." },
+  { id: "wgse-29-i-1", gse: 29, fn: "Informing", text: "Can write short sentences to describe familiar objects." },
+  { id: "wgse-25-x-1", gse: 25, fn: "Interactional", text: "Can write very simple personal messages (e.g. thanks, sorry)." },
+  { id: "wgse-27-x-1", gse: 27, fn: "Interactional", text: "Can write a few sentences about themselves (e.g. family, interests)." },
 
   // ── A2 (GSE 30–35) ──────────────────────────────────────────────────────
-  { id: "wgse-30-i-1", gse: 30, fn: "Informing",      text: "Can write about what people do for a living." },
-  { id: "wgse-31-i-1", gse: 31, fn: "Informing",      text: "Can describe a room, house, or workplace." },
-  { id: "wgse-32-i-1", gse: 32, fn: "Informing",      text: "Can write about feelings using basic fixed expressions." },
-  { id: "wgse-34-i-1", gse: 34, fn: "Informing",      text: "Can write about likes and dislikes using basic fixed expressions." },
-  { id: "wgse-30-x-1", gse: 30, fn: "Interactional",  text: "Can write short messages relating to matters of immediate need." },
-  { id: "wgse-34-x-1", gse: 34, fn: "Interactional",  text: "Can exchange short messages about everyday matters using simple language." },
+  { id: "wgse-30-i-1", gse: 30, fn: "Informing", text: "Can write about what people do for a living." },
+  { id: "wgse-31-i-1", gse: 31, fn: "Informing", text: "Can describe a room, house, or workplace." },
+  { id: "wgse-32-i-1", gse: 32, fn: "Informing", text: "Can write about feelings using basic fixed expressions." },
+  { id: "wgse-34-i-1", gse: 34, fn: "Informing", text: "Can write about likes and dislikes using basic fixed expressions." },
+  { id: "wgse-30-x-1", gse: 30, fn: "Interactional", text: "Can write short messages relating to matters of immediate need." },
+  { id: "wgse-34-x-1", gse: 34, fn: "Interactional", text: "Can exchange short messages about everyday matters using simple language." },
 
   // ── A2+ (GSE 36–42) ─────────────────────────────────────────────────────
-  { id: "wgse-38-i-1", gse: 38, fn: "Informing",      text: "Can write short messages on everyday matters." },
-  { id: "wgse-39-i-1", gse: 39, fn: "Informing",      text: "Can write about past events and everyday experiences." },
-  { id: "wgse-40-i-1", gse: 40, fn: "Informing",      text: "Can write about a future trip or plans." },
-  { id: "wgse-38-x-1", gse: 38, fn: "Interactional",  text: "Can ask and answer questions in short messages on everyday matters." },
-  { id: "wgse-42-x-1", gse: 42, fn: "Interactional",  text: "Can introduce themselves and manage simple exchanges in writing." },
-  { id: "wgse-42-x-2", gse: 42, fn: "Interactional",  text: "Can seek clarification in a simple written exchange." },
+  { id: "wgse-38-i-1", gse: 38, fn: "Informing", text: "Can write short messages on everyday matters." },
+  { id: "wgse-39-i-1", gse: 39, fn: "Informing", text: "Can write about past events and everyday experiences." },
+  { id: "wgse-40-i-1", gse: 40, fn: "Informing", text: "Can write about a future trip or plans." },
+  { id: "wgse-38-x-1", gse: 38, fn: "Interactional", text: "Can ask and answer questions in short messages on everyday matters." },
+  { id: "wgse-42-x-1", gse: 42, fn: "Interactional", text: "Can introduce themselves and manage simple exchanges in writing." },
+  { id: "wgse-42-x-2", gse: 42, fn: "Interactional", text: "Can seek clarification in a simple written exchange." },
 
   // ── B1 (GSE 43–50) ──────────────────────────────────────────────────────
-  { id: "wgse-47-i-1", gse: 47, fn: "Informing",      text: "Can write connected text about personal interests in some detail." },
-  { id: "wgse-48-i-1", gse: 48, fn: "Informing",      text: "Can respond to instructions and ask clarifications in writing." },
-  { id: "wgse-50-i-1", gse: 50, fn: "Informing",      text: "Can write personal online postings with some detail about experiences and feelings." },
-  { id: "wgse-46-x-1", gse: 46, fn: "Interactional",  text: "Can express opinions in online postings with reasons." },
-  { id: "wgse-48-x-1", gse: 48, fn: "Interactional",  text: "Can engage in online exchanges, responding to comments and explaining points." },
-  { id: "wgse-50-x-1", gse: 50, fn: "Interactional",  text: "Can write connected responses with some detail in an ongoing exchange." },
+  { id: "wgse-47-i-1", gse: 47, fn: "Informing", text: "Can write connected text about personal interests in some detail." },
+  { id: "wgse-48-i-1", gse: 48, fn: "Informing", text: "Can respond to instructions and ask clarifications in writing." },
+  { id: "wgse-50-i-1", gse: 50, fn: "Informing", text: "Can write personal online postings with some detail about experiences and feelings." },
+  { id: "wgse-46-x-1", gse: 46, fn: "Interactional", text: "Can express opinions in online postings with reasons." },
+  { id: "wgse-48-x-1", gse: 48, fn: "Interactional", text: "Can engage in online exchanges, responding to comments and explaining points." },
+  { id: "wgse-50-x-1", gse: 50, fn: "Interactional", text: "Can write connected responses with some detail in an ongoing exchange." },
 
   // ── B1+ (GSE 51–58) ─────────────────────────────────────────────────────
-  { id: "wgse-53-x-1", gse: 53, fn: "Interactional",  text: "Can follow the thread of an online discussion and contribute relevant comments." },
-  { id: "wgse-56-x-1", gse: 56, fn: "Interactional",  text: "Can participate in real-time online exchanges with multiple participants." },
-  { id: "wgse-55-i-1", gse: 55, fn: "Informing",      text: "Can report recent events in some detail in writing." },
+  { id: "wgse-53-x-1", gse: 53, fn: "Interactional", text: "Can follow the thread of an online discussion and contribute relevant comments." },
+  { id: "wgse-56-x-1", gse: 56, fn: "Interactional", text: "Can participate in real-time online exchanges with multiple participants." },
+  { id: "wgse-55-i-1", gse: 55, fn: "Informing", text: "Can report recent events in some detail in writing." },
 
   // ── B2+ (GSE 67–75) ─────────────────────────────────────────────────────
-  { id: "wgse-68-x-1", gse: 68, fn: "Interactional",  text: "Can deal with misunderstandings and disagreements in written exchanges." },
-  { id: "wgse-71-x-1", gse: 71, fn: "Interactional",  text: "Can negotiate terms and conditions in writing." },
+  { id: "wgse-68-x-1", gse: 68, fn: "Interactional", text: "Can deal with misunderstandings and disagreements in written exchanges." },
+  { id: "wgse-71-x-1", gse: 71, fn: "Interactional", text: "Can negotiate terms and conditions in writing." },
 ];
 
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 6. AZE MACRO DESCRIPTORS
-//
-// probeGuidance replaces probes.
-// These describe WHAT FUNCTION to elicit — not the exact question to ask.
-// The route injects the session topic so the AI generates topic-appropriate
-// questions that target the same communicative function.
+// 5. AZE MACRO DESCRIPTORS (assessment layer)
 // ═════════════════════════════════════════════════════════════════════════════
 
 const azeMacro: AzeMacro[] = [
@@ -411,9 +190,10 @@ const azeMacro: AzeMacro[] = [
       "Ask their age or what they do",
     ],
     notes:
-      "This is the OPENING ANCHOR — always used regardless of topic. " +
+      "OPENING ANCHOR — always used regardless of topic. " +
       "Accept single words, fragments, or very short phrases. " +
-      "Look for: name, country/nationality, age or occupation.",
+      "CAN requires at least 2 of: name, country/nationality, age, occupation. " +
+      "Single-signal response (name only) = NOT_YET unless followed by further exchange.",
   },
 
   // ── A1 ─────────────────────────────────────────────────────────────────
@@ -429,8 +209,12 @@ const azeMacro: AzeMacro[] = [
       "Ask who is involved in their topic (e.g. who they do the hobby with)",
     ],
     notes:
-      "Look for simple sentences — not just single words. " +
-      "Subject + verb + object pattern. Topic gives the AI a theme to work with.",
+      "INFORMING signals (need at least 2): " +
+      "(1) subject + verb + object pattern present; " +
+      "(2) references something specific from the topic — not just generic agreement; " +
+      "(3) response is at least 2 clauses or 10 words. " +
+      "Single-word answers or generic filler ('it is nice') = NOT_YET. " +
+      "Misunderstanding the question does not invalidate the macro if the candidate attempts to describe something.",
   },
   {
     azeId: "W-INT-2",
@@ -443,8 +227,11 @@ const azeMacro: AzeMacro[] = [
       "Ask what they like or don't like about the topic area",
     ],
     notes:
-      "Look for: attempts to write about self beyond just name/age. " +
-      "Can they string 2–3 simple sentences together on the topic?",
+      "INTERACTION signals (need at least 2): " +
+      "(1) directly addresses the question asked; " +
+      "(2) adds at least one personal detail beyond the question (not just repeating the question back); " +
+      "(3) response is at least 2 clauses or 10 words. " +
+      "Generic responses ('I like it very much') without topic reference = NOT_YET.",
   },
 
   // ── A2 ─────────────────────────────────────────────────────────────────
@@ -460,8 +247,12 @@ const azeMacro: AzeMacro[] = [
       "Ask them to describe their routine or habits around the topic",
     ],
     notes:
-      "Step up from A1: descriptions with some detail, not just naming. " +
-      "The topic should give natural content for description.",
+      "DESCRIPTION signals (need at least 2): " +
+      "(1) names a specific entity from the topic (place, person, activity) — not generic; " +
+      "(2) adds at least one attribute or detail about that entity; " +
+      "(3) expresses a preference or feeling with at least minimal reason ('I like X because Y'). " +
+      "Repetition loops ('it is good because it is nice') = NOT_YET. " +
+      "Topic reference must be explicit — adjacent topics do not count.",
   },
   {
     azeId: "W-INT-3",
@@ -475,8 +266,11 @@ const azeMacro: AzeMacro[] = [
       "Add your own reaction and ask them to respond",
     ],
     notes:
-      "Look for: back-and-forth flow. Can they respond AND add something? " +
-      "AI should share a brief opinion to prompt genuine exchange.",
+      "EXCHANGE signals (need at least 2): " +
+      "(1) directly addresses the question — not adjacent topic; " +
+      "(2) adds a new piece of information not in the question; " +
+      "(3) responds to a follow-up differently from their first answer (shows exchange, not repetition). " +
+      "Vague agreement or filler without new content = NOT_YET.",
   },
 
   // ── A2+ ────────────────────────────────────────────────────────────────
@@ -492,8 +286,12 @@ const azeMacro: AzeMacro[] = [
       "Ask what changed for them in relation to the topic over time",
     ],
     notes:
-      "Key shift: past and future tense appear. Time markers (last week, tomorrow, since). " +
-      "Function over form — look for the attempt, not accuracy.",
+      "TIME MARKERS signals (need at least 2): " +
+      "(1) uses past or future tense with recognisable intent — errors allowed; " +
+      "(2) includes a time reference word (last week, yesterday, soon, in the future, when I was); " +
+      "(3) describes an event or plan — not just a state. " +
+      "Present tense only with no time reference = NOT_YET even if fluent. " +
+      "Assess communicative intent, not grammatical accuracy.",
   },
   {
     azeId: "W-INT-4",
@@ -507,8 +305,11 @@ const azeMacro: AzeMacro[] = [
       "Ask a follow-up that requires them to expand on a previous message",
     ],
     notes:
-      "Look for: can they handle follow-ups? Can they clarify when asked? " +
-      "AI should deliberately prompt repair to test this.",
+      "REPAIR / FOLLOW-UP signals (need at least 2): " +
+      "(1) responds directly to the follow-up — not repeating a previous message; " +
+      "(2) adjusts or expands their answer in response to the challenge; " +
+      "(3) attempts to clarify or rephrase when prompted. " +
+      "Repeating the same content without adjustment = NOT_YET.",
   },
 
   // ── B1 ─────────────────────────────────────────────────────────────────
@@ -524,8 +325,12 @@ const azeMacro: AzeMacro[] = [
       "Ask them to describe a specific moment or example from the topic area",
     ],
     notes:
-      "Key shift: connected text, not isolated sentences. Multiple sentences that flow. " +
-      "Look for linking words, logical sequence, and personal perspective.",
+      "CONNECTED TEXT signals (need at least 2): " +
+      "(1) produces multiple connected sentences — not a list of isolated facts; " +
+      "(2) includes at least one of: example, reason, comparison, description of experience; " +
+      "(3) uses at least one discourse marker showing connection (because, so, but, for example, although). " +
+      "Idea progression must be present — new information added across sentences, not repetition. " +
+      "Generic filler ('it is very interesting and very good') without topic content = NOT_YET.",
   },
   {
     azeId: "W-INT-5",
@@ -539,8 +344,12 @@ const azeMacro: AzeMacro[] = [
       "Ask them to explain why they feel the way they do about the topic",
     ],
     notes:
-      "Look for: opinions with reasons. Can they engage with a viewpoint? " +
-      "AI should genuinely challenge — not just prompt.",
+      "OPINION + ENGAGEMENT signals (need at least 2): " +
+      "(1) states a clear opinion — not just preference ('I think X because Y', not just 'I like X'); " +
+      "(2) provides at least one reason or justification for the opinion; " +
+      "(3) responds to a challenge or disagreement with a new point — not just restating. " +
+      "Topic comfort or confident tone alone does not indicate B1 — reasoning must be present. " +
+      "Adjusting a response to a follow-up challenge is strong evidence.",
   },
 
   // ── B1+ ────────────────────────────────────────────────────────────────
@@ -556,8 +365,11 @@ const azeMacro: AzeMacro[] = [
       "Ask them to summarise or reflect on what they've shared so far",
     ],
     notes:
-      "Look for: following the thread across multiple exchanges. " +
-      "Can they handle topic shifts and make cross-turn connections?",
+      "THREAD signals (need at least 2): " +
+      "(1) follows a topic shift without losing coherence — does not revert to earlier content; " +
+      "(2) references or connects to something said earlier in the conversation; " +
+      "(3) adjusts their response when the AI changes the framing of a question. " +
+      "Simply giving a long response does not indicate B1+ — cross-turn coherence must be present.",
   },
 
   // ── B2+ ────────────────────────────────────────────────────────────────
@@ -573,14 +385,19 @@ const azeMacro: AzeMacro[] = [
       "Ask them to be more precise about something they stated loosely",
     ],
     notes:
-      "Look for: repair of misunderstanding, diplomatic disagreement, precision in clarification. " +
-      "AI must deliberately misinterpret to elicit this — it won't emerge naturally.",
+      "NEGOTIATION signals (need at least 2): " +
+      "(1) identifies and corrects a misunderstanding without becoming confused; " +
+      "(2) defends a position with new reasoning — not just repetition; " +
+      "(3) uses precise or hedged language to clarify a vague point. " +
+      "AI must deliberately misinterpret to elicit this — it will not emerge naturally. " +
+      "Confident tone alone does not indicate B2+ — precision and repair must be present.",
   },
 ];
 
 
+
 // ═════════════════════════════════════════════════════════════════════════════
-// 7. LEVEL CLUSTERS + THRESHOLDS (unchanged)
+// 6. LEVEL CLUSTERS + THRESHOLDS
 // ═════════════════════════════════════════════════════════════════════════════
 
 const levelClusters: LevelCluster[] = [
@@ -672,16 +489,44 @@ const levelClusters: LevelCluster[] = [
 
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 7. TOPICS (session themes for diagnostic chat)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const topics: Topic[] = [
+  {
+    label: "hobbies and free time",
+    seedPrompt: "Use this theme to ask about what they do in their free time, a hobby, or something they enjoy.",
+  },
+  {
+    label: "work or study",
+    seedPrompt: "Use this theme to ask about their job, studies, or daily routine.",
+  },
+  {
+    label: "travel and places",
+    seedPrompt: "Use this theme to ask about places they have been, want to go, or like.",
+  },
+  {
+    label: "family and friends",
+    seedPrompt: "Use this theme to ask about people in their life, what they do together, or how they stay in touch.",
+  },
+  {
+    label: "food and cooking",
+    seedPrompt: "Use this theme to ask about what they like to eat, cook, or try.",
+  },
+];
+
+
+// ═════════════════════════════════════════════════════════════════════════════
 // 8. EXPORT
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const WRITING_TASK1: WritingTask1Config = {
   meta,
   principles,
-  topics,
   gseMicro,
   azeMacro,
   levelClusters,
+  topics,
 };
 
 export default WRITING_TASK1;

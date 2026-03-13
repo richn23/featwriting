@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK5, StimulusSet } from "../../writing/writing-task5-descriptors";
+import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,15 +15,6 @@ type Message = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STIMULUS SELECTION
-//
-// Maps candidate level → tier, then picks a random set from that tier.
-// Uses a fallback chain so edge levels always get something appropriate.
-//
-// Tier map:
-//   Pre-A1 / A1 / A2   → simple
-//   A2+    / B1         → everyday
-//   B1+    / B2         → detailed
-//   B2+    / C1         → complex
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Tier = StimulusSet["tier"];
@@ -45,8 +37,6 @@ function getTier(level: string): Tier {
 function pickRandomSet(level: string): StimulusSet {
   const tier = getTier(level);
   const pool = WRITING_TASK5.stimulusSets.filter(s => s.tier === tier);
-
-  // Fallback: if tier pool is somehow empty, use all sets
   const candidates = pool.length > 0 ? pool : WRITING_TASK5.stimulusSets;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
@@ -74,7 +64,6 @@ const diagnosisMacroBlock = WRITING_TASK5.levelClusters
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONVERSATION PROMPT BUILDER
-// Card content injected so the AI knows exactly what the candidate can see.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildConversationPrompt(stimSet: StimulusSet | null): string {
@@ -101,11 +90,12 @@ ${cardBlock}
 1. ONE question at a time. Never ask two things.
 2. Maximum 2 sentences per turn.
 3. Be warm and conversational — like a friend asking for advice.
-4. Start by asking them to describe the main differences.
+4. Start by asking them to describe the main differences between the two options.
 5. Then introduce situations: "My friend needs X. Which would you recommend?"
 6. After they answer, CHANGE the situation: "But what if they also need Y?"
 7. Push for reasons: "Why that one?" / "The other has X — doesn't that matter?"
-8. If they struggle on TWO consecutive questions, you have found their ceiling.
+8. Reward scenario adaptation: if they adjust their recommendation when the situation changes, that is strong evidence of mediation ability — probe this actively.
+9. If they struggle on TWO consecutive questions, you have found their ceiling.
 
 ═══ PROBING STRATEGY ═══
 
@@ -133,12 +123,17 @@ const diagnosisPrompt = `You are a CEFR assessment specialist analysing Writing 
 
 The candidate could see two option cards and had a written chat where the AI asked situational questions. The candidate had to relay information from the cards, recommend options, and adapt advice as situations changed.
 
+Mediation means helping someone understand or decide using information from a source. In this task, the cards are the source and the AI scenarios represent the person needing advice. The candidate's job is to bridge the two — not to give personal opinions.
+
 This tests MEDIATION: the ability to bridge between a source (the cards) and a person with specific needs.
 The topic (hotels, phones, jobs, etc.) is irrelevant to scoring — assess FUNCTION, not content.
+Do not reward interesting opinions or personal knowledge. Score communicative mediation function only.
 
 ═══ CRITICAL SCORING PRINCIPLE ═══
 
 Score what the candidate DEMONSTRATED. If they showed they could weigh trade-offs, mark that CAN even if the topic was simple. Function is topic-agnostic.
+
+If the candidate adjusts their recommendation when the situation changes (e.g. different needs or priorities), this is strong evidence of higher mediation ability and should support higher-level CAN decisions.
 
 ═══ MACROS TO ASSESS ═══
 
@@ -148,11 +143,18 @@ ${diagnosisMacroBlock}
 
 1. CAN = clear evidence the candidate achieved this mediating function.
 2. NOT_YET = attempted but did not clearly achieve it.
-3. NOT_TESTED = the conversation did not create conditions (use sparingly).
+3. NOT_TESTED = the conversation did not create conditions for this function. Use sparingly — if the conversation created the opportunity and the candidate did not demonstrate the function, score NOT_YET.
 4. Be conservative: mixed evidence = NOT_YET.
-5. A single clear instance IS sufficient for CAN.
-6. Higher-level demonstration overrides lower-level gaps.
-7. Look for evidence across the ENTIRE conversation, not just one exchange.
+5. A single clear instance may be sufficient for CAN. Treat minimal or borderline evidence cautiously.
+6. Very short responses that do not clearly justify a recommendation should normally be scored NOT_YET due to insufficient evidence.
+7. The candidate must use information from the cards when giving advice. If the candidate gives generic advice without referring to features from the cards, score NOT_YET for higher mediation macros.
+8. If the candidate misreads a feature from the card but still demonstrates the intended mediation function (e.g. comparing options or recommending based on needs), this may still count as CAN for the function — but note the misunderstanding in the rationale.
+9. Higher-level mediation normally requires comparing both options. If the candidate discusses only one option without weighing it against the other, higher comparison macros should normally be scored NOT_YET.
+10. Vague recommendations without a clear reason or connection to the scenario should not be scored CAN for recommendation macros.
+11. Higher-level mediation often involves weighing trade-offs between options (e.g. price vs quality, convenience vs features). Evidence of recognising advantages and disadvantages strengthens higher-level CAN decisions.
+12. Clear higher-level mediation may support lower-level CAN judgements when the lower-level skill is logically required by what was demonstrated.
+13. Evidence must quote the candidate's message where the comparison or recommendation is made.
+14. Look for evidence across the ENTIRE conversation, not just one exchange.
 
 IMPORTANT: Score EVERY macro. The system calculates the level from your scores.
 
@@ -168,7 +170,7 @@ Respond ONLY with valid JSON:
       "fn": "Informing",
       "result": "CAN|NOT_YET|NOT_TESTED",
       "rationale": "Short explanation (1 sentence)",
-      "evidence": "Direct quote from the transcript"
+      "evidence": "Direct quote from the candidate's message"
     }
   ]
 }`;
@@ -178,37 +180,7 @@ Respond ONLY with valid JSON:
 // LANGUAGE ANALYSIS PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const languageAnalysisPrompt = `You are a CEFR-trained language analyst. Analyse the candidate's written messages from a mediation/advising task.
-
-═══ CONTEXT ═══
-
-The candidate looked at two option cards and chatted about them, making recommendations for different situations. Assess their language quality.
-
-═══ DIMENSIONS ═══
-
-For each dimension, provide a CEFR band, descriptor, and 1-2 examples:
-
-1. GRAMMAR (Range & Accuracy)
-2. VOCABULARY (Range & Precision) — especially advisory and comparative language
-3. COHERENCE & COHESION — logical flow of recommendations
-4. SPELLING & MECHANICS
-5. COMMUNICATIVE EFFECTIVENESS — does the advice actually help?
-
-═══ OUTPUT FORMAT ═══
-
-Respond ONLY with valid JSON:
-{
-  "overallFormLevel": "B1",
-  "overallFormSummary": "2-sentence summary",
-  "dimensions": [
-    {
-      "dimension": "Grammar",
-      "level": "B1",
-      "descriptor": "One sentence",
-      "examples": ["quote 1", "quote 2"]
-    }
-  ]
-}`;
+const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -222,8 +194,6 @@ export async function POST(req: NextRequest) {
 
 
     // ── Select stimulus set ────────────────────────────────────────────
-    // Called once at session start. Returns a random set for the level.
-    // Frontend stores the set id and sends it back on every subsequent request.
     if (action === "get-stimulus") {
       const stimulusSet = pickRandomSet(prevLevel || "B1");
       return NextResponse.json({ stimulusSet });
@@ -247,7 +217,8 @@ export async function POST(req: NextRequest) {
       } else {
         prompt +=
           `\n\nThis is exchange ${exchangeCount} of up to ${WRITING_TASK5.meta.maxExchanges}. ` +
-          `Ask the next situational question or probe their last answer.`;
+          `Ask the next situational question or probe their last answer. ` +
+          `If they gave a recommendation, change the situation to test whether they adapt.`;
       }
 
       const response = await openai.chat.completions.create({
@@ -276,6 +247,11 @@ export async function POST(req: NextRequest) {
         .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
         .join("\n");
 
+      const candidateOnly = (messages || [])
+        .filter((m: Message) => m.role === "user")
+        .map((m: Message) => m.content)
+        .join("\n");
+
       const [functionRes, formRes] = await Promise.all([
         openai.chat.completions.create({
           model: "gpt-4o",
@@ -290,7 +266,7 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o",
           messages: [
             { role: "system", content: languageAnalysisPrompt },
-            { role: "user", content: `Here is the full transcript:\n\n${transcript}` },
+            { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
           ],
           max_tokens: 2000,
           temperature: 0.1,

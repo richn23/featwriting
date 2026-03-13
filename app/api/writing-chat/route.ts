@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK1, Topic } from "../../writing/writing-descriptors";
-import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -11,6 +10,53 @@ type Message = {
   role: "assistant" | "user";
   content: string;
 };
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGE DEFINITIONS
+//
+// Six stages map directly to CEFR evidence layers:
+//   0 IDENTITY        → Pre-A1 / A1   (W-INT-1, W-INF-1, W-INT-2)
+//   1 DESCRIPTION     → A1 / A2       (W-INF-2, W-INT-3)
+//   2 EXPERIENCE      → A2+           (W-INF-3, W-INT-4)
+//   3 OPINION_REASON  → B1            (W-INF-4, W-INT-5)
+//   4 THREAD_FOLLOWUP → B1+           (W-INT-6)
+//   5 MISINTERPRET    → B2+           (W-INT-7)
+//
+// Stage progression is computed entirely in the route — the model does not
+// control or signal stage changes. The route returns nextStage to the frontend
+// which stores it and sends it back each turn.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STAGES = {
+  IDENTITY:        0,
+  DESCRIPTION:     1,
+  EXPERIENCE:      2,
+  OPINION_REASON:  3,
+  THREAD_FOLLOWUP: 4,
+  MISINTERPRET:    5,
+} as const;
+
+type Stage = typeof STAGES[keyof typeof STAGES];
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGE ADVANCEMENT LOGIC (route-controlled)
+//
+// Identity spans exchanges 0–2 (3 turns: name, location, job).
+// All other stages advance after 1 candidate response.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function computeNextStage(currentStage: Stage, exchangeCount: number): Stage {
+  if (currentStage === STAGES.IDENTITY) {
+    return exchangeCount >= 2 ? STAGES.DESCRIPTION : STAGES.IDENTITY;
+  }
+  if (currentStage === STAGES.DESCRIPTION)     return STAGES.EXPERIENCE;
+  if (currentStage === STAGES.EXPERIENCE)      return STAGES.OPINION_REASON;
+  if (currentStage === STAGES.OPINION_REASON)  return STAGES.THREAD_FOLLOWUP;
+  if (currentStage === STAGES.THREAD_FOLLOWUP) return STAGES.MISINTERPRET;
+  return STAGES.MISINTERPRET; // ceiling — stays here
+}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +70,7 @@ function pickRandomTopic(): Topic {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUILD LEVEL BLOCK
+// BUILD LEVEL BLOCK (diagnosis prompt reference only)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildLevelBlock(): string {
@@ -39,7 +85,7 @@ function buildLevelBlock(): string {
             .join("\n");
           return (
             `    ${m.azeId} [${m.fn}]: ${m.claim}\n` +
-            `      Probe guidance (generate a question that does this):\n` +
+            `      Probe guidance:\n` +
             `${guidanceList}` +
             (m.notes ? `\n      Note: ${m.notes}` : "")
           );
@@ -58,89 +104,167 @@ function buildLevelBlock(): string {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STAGE INSTRUCTION BUILDER
+//
+// Returns the specific instruction appended to the conversation prompt.
+// The model generates a message for this stage — it does not control
+// when the stage changes. Stage advancement is handled by computeNextStage().
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildStageInstruction(
+  stage: Stage,
+  exchangeCount: number,
+  topic: Topic,
+  messages: Message[]
+): string {
+  const lastCandidateMsg = [...messages]
+    .reverse()
+    .find((m) => m.role === "user")?.content ?? "";
+
+  switch (stage) {
+    case STAGES.IDENTITY:
+      if (exchangeCount === 0) {
+        return (
+          "\n\nSTAGE: IDENTITY — Exchange 0.\n" +
+          "Greet warmly. Ask for their name only. One sentence greeting + one question.\n" +
+          "Do not ask anything else. Add <ceiling>false</ceiling>."
+        );
+      }
+      if (exchangeCount === 1) {
+        return (
+          "\n\nSTAGE: IDENTITY — Exchange 1.\n" +
+          "Ask ONE question only: where they are from or where they live.\n" +
+          "Vary the wording naturally. Keep it under 8 words.\n" +
+          "Add <ceiling>false</ceiling>."
+        );
+      }
+      return (
+        "\n\nSTAGE: IDENTITY — Exchange 2 (final identity question).\n" +
+        "Ask ONE question only: what do they do — work or study.\n" +
+        "Vary the wording naturally. Keep it under 10 words.\n" +
+        "Add <ceiling>false</ceiling>."
+      );
+
+    case STAGES.DESCRIPTION:
+      return (
+        "\n\nSTAGE: DESCRIPTION — Exchange " + exchangeCount + ".\n" +
+        "Ask the candidate to describe something familiar connected to what they told you — their job, city, or daily life.\n" +
+        "Do NOT introduce the session topic yet.\n" +
+        "The question must require an entity + at least one attribute or detail.\n" +
+        "Examples: 'Tell me something you like about your city.' / 'Describe a place you enjoy going to.'\n" +
+        "Avoid yes/no questions.\n" +
+        "Add <ceiling>false</ceiling>."
+      );
+
+    case STAGES.EXPERIENCE:
+      return (
+        "\n\nSTAGE: EXPERIENCE — Exchange " + exchangeCount + ".\n" +
+        "Now introduce the session topic: " + topic.label + ".\n" +
+        "Ask about a past event OR a future plan connected to this topic.\n" +
+        "The question must require past or future tense — not just present description.\n" +
+        "Examples: 'Tell me about a time you...' / 'What did you do last...?' / 'What would you like to do next...?'\n" +
+        "Add <ceiling>false</ceiling>."
+      );
+
+    case STAGES.OPINION_REASON:
+      return (
+        "\n\nSTAGE: OPINION_REASON — Exchange " + exchangeCount + ".\n" +
+        "Ask a position question about " + topic.label + " that requires justification.\n" +
+        "The question must demand an opinion AND a reason — not just a preference.\n" +
+        "Examples: 'Do you think [X] is better than [Y]? Why?' / 'Is [X] important? Why or why not?'\n" +
+        "Avoid knowledge questions. Keep it experience-based.\n" +
+        "Add <ceiling>false</ceiling>."
+      );
+
+    case STAGES.THREAD_FOLLOWUP:
+      return (
+        "\n\nSTAGE: THREAD_FOLLOWUP — Exchange " + exchangeCount + ".\n" +
+        "Reference something specific the candidate said earlier in the conversation.\n" +
+        "Connect it to a new question about " + topic.label + ".\n" +
+        "You MUST name what they said — do not make a generic question.\n" +
+        "Examples: 'Earlier you said [X]. Why do you think that is?' / 'You mentioned [X] — does that affect how you feel about [Y]?'\n" +
+        `The candidate's last message: "${lastCandidateMsg.slice(0, 120)}"\n` +
+        "Add <ceiling>false</ceiling>."
+      );
+
+    case STAGES.MISINTERPRET:
+      return (
+        "\n\nSTAGE: MISINTERPRET — Exchange " + exchangeCount + " (runs once — this is the final probe).\n" +
+        "Deliberately misinterpret or oversimplify something the candidate said.\n" +
+        "The misinterpretation must be mild — not absurd or confusing.\n" +
+        "Bad: 'So you hate X completely?' — Good: 'So you think X is always better than Y?'\n" +
+        `The candidate's last message: "${lastCandidateMsg.slice(0, 120)}"\n` +
+        "Add <ceiling>true</ceiling>."
+      );
+
+    default:
+      return (
+        "\n\nExchange " + exchangeCount + ". Continue probing " + topic.label + ".\n" +
+        "Add <ceiling>true</ceiling>."
+      );
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BUILD CONVERSATION PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildConversationPrompt(topic: Topic): string {
-  const levelBlock = buildLevelBlock();
-
   return `You are an AI examiner for the AZE Writing Test — Task 1: ${WRITING_TASK1.meta.title}.
 
-THIS IS A WRITTEN TEST. The candidate is TYPING their responses in a WhatsApp-style chat. You are also typing. There is NO audio, NO speaking.
+THIS IS A WRITTEN TEST. The candidate is TYPING responses in a WhatsApp-style chat. There is NO audio.
 
-YOUR GOAL: Find the candidate's WRITTEN CEFR level through a natural text chat by probing their ability to interact and inform in writing.
-
-You are an EXAMINER, not a chatbot. Warm but purposeful. Every turn creates a communicative condition that reveals what the candidate can do in writing.
+YOUR GOAL: Elicit CEFR writing evidence across six structured stages. Each stage targets specific macros. You still sound natural — but you follow the stage instruction precisely.
 
 ═══ SESSION TOPIC ═══
 
 Today's topic: ${topic.label}
 ${topic.seedPrompt}
 
-IMPORTANT — how the topic works:
-- Exchanges 0–2: ALWAYS cover the anchor (name, where they're from, what they do). Do not introduce the topic yet.
-- Exchange 3 onwards: naturally steer the conversation toward the session topic.
-- Generate your questions by combining the PROBE GUIDANCE below with the session topic.
-- Do NOT mention the topic label explicitly. Let it emerge naturally.
+Do NOT name the topic explicitly until the EXPERIENCE stage. Let it emerge naturally.
 
-═══ QUESTION QUALITY RULES ═══
+═══ SIX STAGES ═══
 
-Every question you ask must follow these rules WITHOUT EXCEPTION:
+IDENTITY        → Pre-A1/A1  — name, location, job
+DESCRIPTION     → A1/A2      — describe a familiar entity with detail
+EXPERIENCE      → A2+        — past event or future plan (introduces topic)
+OPINION_REASON  → B1         — position + justification
+THREAD_FOLLOWUP → B1+        — reference earlier content, connect ideas
+MISINTERPRET    → B2+        — deliberately misread candidate, prompt repair
 
-1. ONE question per turn. Never two questions in the same message.
-2. Questions must be SHORT, DIRECT, and UNAMBIGUOUS. No implied context.
-3. Level-appropriate length:
-   - Pre-A1 / A1: maximum 8 words. e.g. "What is your job?"
-   - A2: maximum 12 words. e.g. "What do you usually do at weekends?"
-   - A2+ / B1: maximum 15 words. One clear, direct question.
-   - B1+: can be slightly longer but still one unambiguous question.
-4. If the candidate mentions something specific (e.g. a city, a person, an activity), ask DIRECTLY about that thing.
-   - GOOD: "What do you like about Tokyo?"
-   - BAD: "How do you usually get around your city?" ← too indirect, assumes context
-5. NEVER ask a question that depends on the candidate understanding an implied link from a previous message.
-6. STAY ON THE SESSION TOPIC. Once the topic has been introduced, every question must relate to "${topic.label}". Do NOT drift to other subjects.
-7. Write like a person texting — natural and warm, but always clear.
+The route controls which stage you are in. Stay in the current stage until the next exchange.
 
-═══ RULES ═══
+═══ HARD RULES ═══
 
-1. ONE question or prompt per turn. Never two.
-2. Maximum 2 sentences per turn. Keep it chat-like — short and natural.
-3. Be warm and encouraging but don't waste turns on filler.
-4. Start at the lowest level (name, country, what they do).
-5. If the candidate writes easily with detail → probe UPWARD (harder question).
-6. If the candidate gives very short answers or struggles → stay or probe DOWNWARD.
-7. Do NOT test grammar or vocabulary directly. Test communicative functions in writing.
-8. If the candidate struggles on TWO consecutive questions at the same level, you have found their ceiling. Do not push further.
+1. ONE question per turn. Never two.
+2. Maximum 2 sentences per turn.
+3. Every question must create communicative demand (describe, explain, justify, compare, recount).
+4. No yes/no questions except as a repair move.
+5. No standalone praise or filler. Every turn contains a probe.
+6. Follow-up questions must reference the candidate's actual content — not generic topics.
+7. Misinterpretation must be mild — not confusing or absurd.
+8. Avoid knowledge questions. Keep prompts experience-based.
+9. Write like a natural text chat — concise and warm.
 
-═══ WHAT TO LOOK FOR IN WRITTEN RESPONSES ═══
+═══ WHAT YOU ARE ASSESSING ═══
 
-You are assessing WRITTEN communicative competence:
-- Can they convey information in writing? (Informing)
-- Can they manage a written exchange? (Interactional)
+INFORMING: Can they convey information in writing? (describe, explain, recount, give reasons)
+INTERACTING: Can they manage a written exchange? (respond, follow a thread, clarify, engage)
 
-NOT grammar accuracy. NOT vocabulary range. Those are scored separately.
-Focus on: Can they DO the communicative thing in writing?
+NOT grammar accuracy. NOT vocabulary range.
 
-═══ LEVEL GUIDE ═══
+═══ CEILING RULE ═══
 
-For each level below, use the PROBE GUIDANCE to generate a question that fits the session topic.
-Do not copy the guidance literally — turn it into a short, clear, direct chat message about ${topic.label}.
-
-${levelBlock}
-
-═══ PROBING STRATEGY ═══
-
-After each response, decide: did they handle it comfortably IN WRITING?
-- If YES → move to the next level up
-- If NO → stay or go easier
-- If they struggle TWICE in a row → you've found the ceiling
-- You do NOT need to test every macro. Stop probing up once you find the ceiling.
+A STRUGGLE = candidate fails to provide enough written evidence of the targeted function.
+Short but successful answers do NOT count as struggle.
+If the candidate struggles on TWO consecutive exchanges at the same stage, add <ceiling>true</ceiling>.
 
 ═══ DONE SIGNAL ═══
 
 At the end of EVERY response, add:
-<ceiling>true</ceiling> — you believe you've found the ceiling
-<ceiling>false</ceiling> — you want to keep probing`;
+<ceiling>true</ceiling> — ceiling found or final stage complete
+<ceiling>false</ceiling> — continue probing`;
 }
 
 
@@ -179,7 +303,9 @@ Task 1 tests two functions:
 - INTERACTIONAL: Can the candidate manage a written exchange? (respond, clarify, engage)
 - INFORMING: Can the candidate convey information in writing? (describe, recount, explain)
 
-The conversation may have been about any topic (hobbies, food, travel, etc.).
+The conversation progressed through structured stages:
+IDENTITY → DESCRIPTION → EXPERIENCE → OPINION_REASON → THREAD_FOLLOWUP → MISINTERPRET
+
 The topic is irrelevant to scoring — assess FUNCTION, not content.
 
 ═══ MACROS TO ASSESS (grouped by level) ═══
@@ -188,16 +314,16 @@ ${diagnosisMacroBlock}
 
 ═══ SCORING RULES ═══
 
-1. CAN = clear, unambiguous evidence in the transcript that the candidate achieved this communicative function IN WRITING.
-2. NOT_YET = no evidence, weak evidence, or the candidate clearly struggled.
-3. NOT_TESTED = the conversation never reached this level / never created conditions to test this macro.
+1. CAN = clear, unambiguous evidence the candidate achieved this function IN WRITING.
+2. NOT_YET = no evidence, weak evidence, or clear struggle.
+3. NOT_TESTED = conversation never created conditions to test this macro. Use sparingly — if the stage ran and the candidate did not demonstrate the function, score NOT_YET.
 4. Be conservative: mixed or ambiguous evidence = NOT_YET.
-5. A single clear instance under appropriate communicative demand IS sufficient for CAN.
+5. A single clear instance under appropriate demand IS sufficient for CAN.
 6. Multiple weak instances do NOT combine into CAN.
 7. One response can evidence multiple macros across levels.
-8. If a candidate demonstrates competence at a higher level, lower-level gaps can be overridden.
+8. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied by the performance.
 
-IMPORTANT: Score EVERY macro in the list. Do not skip any.
+IMPORTANT: Score EVERY macro. Do not skip any.
 
 ═══ OUTPUT FORMAT ═══
 
@@ -222,7 +348,42 @@ Respond ONLY with valid JSON, no other text:
 // LANGUAGE ANALYSIS PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
+const languageAnalysisPrompt = `You are a CEFR-trained language analyst. You have observed a candidate's written responses in a diagnostic text chat.
+
+Your task: Analyse the candidate's messages for language quality across five dimensions. Ignore the AI examiner's messages entirely.
+
+═══ CONTEXT ═══
+
+WhatsApp-style written chat. Candidate typed naturally. Assess language produced — not what they were asked.
+
+═══ DIMENSIONS ═══
+
+For each dimension:
+- Estimated CEFR band (Pre-A1, A1, A2, A2+, B1, B1+, B2, B2+, C1, C2)
+- Short descriptor (1 sentence)
+- 1-2 specific examples from the transcript
+
+1. GRAMMAR (Range & Accuracy)
+2. VOCABULARY (Range & Precision)
+3. COHERENCE & COHESION
+4. SPELLING & MECHANICS
+5. COMMUNICATIVE EFFECTIVENESS
+
+═══ OUTPUT FORMAT ═══
+
+Respond ONLY with valid JSON, no other text:
+{
+  "overallFormLevel": "A2",
+  "overallFormSummary": "Brief 2-sentence summary",
+  "dimensions": [
+    {
+      "dimension": "Grammar",
+      "level": "A2",
+      "descriptor": "One sentence description",
+      "examples": ["example 1", "example 2"]
+    }
+  ]
+}`;
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,9 +411,18 @@ function levelToScore(label: string): number {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, exchangeCount, wrapUp, action, topic: topicFromClient } = await req.json();
+    const {
+      messages,
+      exchangeCount,
+      wrapUp,
+      action,
+      topic: topicFromClient,
+      stage: stageFromClient,
+    } = await req.json();
 
     const topic: Topic = topicFromClient ?? pickRandomTopic();
+    const currentStage: Stage = (stageFromClient ?? STAGES.IDENTITY) as Stage;
+
 
     // ── Diagnosis ──────────────────────────────────────────────────────────
     if (action === "diagnose") {
@@ -279,12 +449,7 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o",
           messages: [
             { role: "system", content: languageAnalysisPrompt },
-            {
-              role: "user",
-              content:
-                `Here is the full transcript:\n\n${transcript}\n\n---\n\n` +
-                `Candidate messages only (for focused analysis):\n\n${candidateOnly}`,
-            },
+            { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
           ],
           max_tokens: 2000,
           temperature: 0.1,
@@ -351,33 +516,18 @@ export async function POST(req: NextRequest) {
 
     // ── Normal conversation turn ───────────────────────────────────────────
     const conversationPrompt = buildConversationPrompt(topic);
-    let prompt = conversationPrompt;
 
-    if (exchangeCount === 0) {
-      prompt +=
-        "\n\nThis is the START. Greet warmly and ask for their name only. " +
-        "Maximum 2 sentences. Do NOT ask about location or job yet. " +
-        "Add <ceiling>false</ceiling>.";
-    } else if (exchangeCount === 1) {
-      prompt +=
-        "\n\nThis is exchange 1. ANCHOR phase. Ask ONE question only: where are you from? " +
-        "Do NOT ask about job. Do NOT introduce the session topic. Keep it under 10 words.";
-    } else if (exchangeCount === 2) {
-      prompt +=
-        "\n\nThis is exchange 2. ANCHOR phase. Ask ONE question only: what do you do — work or study? " +
-        "Do NOT introduce the session topic yet. Keep it under 10 words.";
-    } else if (wrapUp) {
-      prompt +=
-        "\n\nThis is the final exchange. Thank the candidate briefly in 1 sentence. " +
+    let stageInstruction: string;
+
+    if (wrapUp) {
+      stageInstruction =
+        "\n\nFINAL EXCHANGE. Thank the candidate briefly in 1 sentence. " +
         "Add <ceiling>true</ceiling>.";
     } else {
-      prompt +=
-        `\n\nThis is exchange ${exchangeCount} of up to ${WRITING_TASK1.meta.maxExchanges}. ` +
-        `The anchor phase is complete. Now probe the session topic: ${topic.label}. ` +
-        `Ask ONE short, direct, unambiguous question based on the level guide. ` +
-        `STAY on the topic of "${topic.label}" — do NOT drift to other subjects. ` +
-        `If the candidate mentioned something specific, ask directly about that thing.`;
+      stageInstruction = buildStageInstruction(currentStage, exchangeCount, topic, messages);
     }
+
+    const prompt = conversationPrompt + stageInstruction;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -390,14 +540,24 @@ export async function POST(req: NextRequest) {
 
     const rawMessage = response.choices[0].message.content || "";
 
+    // Ceiling signal from model
     const ceilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
     const ceilingReached = ceilingMatch ? ceilingMatch[1] === "true" : false;
 
+    // Next stage computed entirely in route — model does not control this
+    const nextStage: Stage = computeNextStage(currentStage, exchangeCount);
+
+    // Clean message
     const aiMessage = rawMessage
       .replace(/<ceiling>(true|false)<\/ceiling>/g, "")
       .trim();
 
-    return NextResponse.json({ message: aiMessage, ceilingReached, topic });
+    return NextResponse.json({
+      message: aiMessage,
+      ceilingReached,
+      stage: nextStage,
+      topic,
+    });
 
   } catch (error) {
     console.error("Writing Chat API error:", error);

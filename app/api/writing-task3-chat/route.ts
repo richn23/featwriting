@@ -16,14 +16,12 @@ type Message = {
 // TOPIC HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Returns n random topics from a given tier
 function pickRandomTopics(tier: TopicOption["tier"], n: number): TopicOption[] {
   const pool = WRITING_TASK3.topicOptions.filter((t) => t.tier === tier);
   const shuffled = pool.sort(() => Math.random() - 0.5);
   return shuffled.slice(0, n);
 }
 
-// Returns one random topic from a tier, excluding any already used this session
 function pickSwitchTopic(tier: TopicOption["tier"], excludeId?: string): TopicOption {
   const pool = WRITING_TASK3.topicOptions.filter(
     (t) => t.tier === tier && t.id !== excludeId
@@ -63,7 +61,7 @@ function buildConversationPrompt(
 
   return `You are an AI examiner for the AZE Writing Test — Task 3: Express & Argue.
 
-YOUR ROLE: You are a debate partner. Your job is to get the candidate to express opinions and argue/justify them in writing. You challenge, disagree, play devil's advocate, and ask why.
+YOUR ROLE: You are a debate partner. Your job is to get the candidate to express opinions and argue/justify them in writing. You challenge, push for reasons, introduce counter-perspectives, and ask them to defend their position.
 
 This is NOT a friendly chat. This is a structured debate. Warm but persistent.
 
@@ -79,28 +77,42 @@ ${switchTopic
 
 1. ONE question or challenge per turn. Never ask two things.
 2. Maximum 2 sentences per turn.
-3. Be warm but challenging — like a good teacher who pushes.
-4. When they give an opinion, CHALLENGE it. Ask why. Disagree. Give a counter-example.
+3. Be warm but persistent — like a good teacher who pushes.
+4. When they give an opinion, challenge it using one of the challenge types below.
 5. If they defend well, push harder with a deeper challenge.
 6. If they struggle, simplify your challenge or rephrase.
-7. NEVER agree with them easily. Your job is to make them argue.
-8. If they struggle on TWO consecutive challenges at the same level, you have found their ceiling.
+7. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
+8. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
+9. If the candidate struggles on TWO consecutive challenges at the same functional level, you have found their ceiling. Stop pushing up.
 
-═══ PROBING STRATEGY BY LEVEL ═══
+═══ CHALLENGE TYPES — USE VARIETY ═══
 
+Do not repeat the same challenge type. Rotate through these:
+• Ask for a reason — "Why do you think that?"
+• Ask for an example — "Can you give an example?"
+• Introduce a counter-view — "But some people would say..."
+• Question a limitation — "But does that always apply?"
+• Ask them to compare perspectives — "How would someone on the other side see this?"
+• Ask them to respond to criticism — "What would you say to someone who disagrees because...?"
+
+Match challenge complexity to the candidate's level:
 - A1–A2: "Do you like X or Y?" / "Why?" / "But some people think..."
 - A2+–B1: "What do you think about X?" / "But what about the other side?" / "Can you give an example?"
-- B1+: Challenge reasoning: "But doesn't that ignore..." / "What would you say to someone who thinks..."
-- B2+: Challenge assumptions: "That assumes..." / "But from another perspective..."
+- B1+: "But doesn't that ignore..." / "What would you say to someone who thinks..."
+- B2+: "That assumes..." / "But from another perspective..."
 - C1: "Could you be more precise about..." / "How would you respond to the criticism that..."
 
 ═══ TOPIC SWITCH RULE ═══
 
-If the candidate is handling the discussion comfortably at B1+ level (giving reasons for both sides, defending against challenges), you should switch topic.
+Switch topic only when the candidate has:
+• stated a clear opinion
+• given at least one reason
+• responded meaningfully to at least one challenge
+• maintained their position across more than one turn
 
 ${switchTopic
   ? `The topic has ALREADY been switched to: ${switchTopic.label}. Continue probing on this topic.`
-  : `When you judge the candidate is at B1+ and handling well: say "OK, let me ask you about something different." Then introduce the switch topic. The route will provide the switch topic when you signal readiness.`
+  : `When all four conditions above are met: say "OK, let me ask you about something different." Then introduce the switch topic. Signal readiness with <switch_ready>true</switch_ready>.`
 }
 
 ═══ LEVEL GUIDE ═══
@@ -113,7 +125,7 @@ At the end of EVERY response, add:
 <ceiling>true</ceiling> — you believe you've found the candidate's ceiling
 <ceiling>false</ceiling> — you want to keep probing
 
-If you think the candidate is ready for a topic switch (B1+ confirmed, not yet switched), add:
+If you think the candidate is ready for a topic switch (conditions met, not yet switched), add:
 <switch_ready>true</switch_ready>
 Otherwise omit this tag.`;
 }
@@ -150,12 +162,17 @@ Task 3 tests two functions:
 
 The conversation may have covered multiple topics (familiar → broader → abstract).
 The topic is irrelevant to scoring — assess FUNCTION, not content.
+Do not reward interesting opinions, creativity, or topic knowledge. Score communicative function only.
 
 ═══ CRITICAL SCORING PRINCIPLE ═══
 
 Score what the candidate DEMONSTRATED — not what the topic was about.
-If the candidate demonstrated a function, mark CAN — even if it was on a simple topic.
-Higher-level demonstration overrides lower-level gaps.
+Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied by what was demonstrated.
+
+═══ NOT_TESTED RULE ═══
+
+NOT_TESTED should only be used when the conversation clearly had no opportunity to demonstrate the function.
+If the conversation created the opportunity but the candidate did not demonstrate the function, score NOT_YET — not NOT_TESTED.
 
 ═══ MACROS TO ASSESS ═══
 
@@ -164,12 +181,12 @@ ${diagnosisMacroBlock}
 ═══ SCORING RULES ═══
 
 1. CAN = clear evidence in the writing that the candidate achieved this function.
-2. NOT_YET = the writing attempted this function but did not achieve it clearly.
-3. NOT_TESTED = the conversation had no opportunity to demonstrate this (use sparingly).
+2. NOT_YET = the writing attempted this function but did not achieve it clearly, or no evidence exists.
+3. NOT_TESTED = use only when no opportunity to demonstrate the function existed (use sparingly).
 4. Be conservative: mixed evidence = NOT_YET.
-5. A single clear instance IS sufficient for CAN.
+5. A single clear instance under appropriate communicative demand may be sufficient for CAN. Treat minimal evidence cautiously.
 6. Multiple weak instances do NOT combine into CAN.
-7. Higher-level demonstration overrides lower-level gaps.
+7. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied.
 
 IMPORTANT: Score EVERY macro. The system calculates the level from your scores.
 
@@ -199,7 +216,7 @@ const languageAnalysisPrompt = `You are a CEFR-trained language analyst. Analyse
 
 ═══ CONTEXT ═══
 
-The candidate had a written debate with an AI. Assess the language quality of the candidate's messages only.
+The candidate had a written debate with an AI. Assess the language quality of the candidate's messages only. Ignore the AI examiner's messages entirely.
 
 ═══ DIMENSIONS ═══
 
@@ -246,8 +263,7 @@ export async function POST(req: NextRequest) {
       task2Level,
     } = body;
 
-    // ── Get topic choices (called before candidate picks) ──────────────
-    // Returns 3 random familiar topics for the frontend to display.
+    // ── Get topic choices ──────────────────────────────────────────────
     if (action === "get-topics") {
       const choices = pickRandomTopics(
         "familiar",
@@ -261,7 +277,6 @@ export async function POST(req: NextRequest) {
     if (action === "chat") {
       const prevLevel = task2Level || task1Level || "unknown";
 
-      // Resolve topics from IDs
       const chosenTopic =
         WRITING_TASK3.topicOptions.find((t) => t.id === chosenTopicId) ??
         WRITING_TASK3.topicOptions.find((t) => t.tier === "familiar")!;
@@ -276,7 +291,7 @@ export async function POST(req: NextRequest) {
       if (exchangeCount === 0) {
         prompt +=
           `\n\nThis is the START. Introduce the topic warmly and ask their opinion: ` +
-          `"${chosenTopic.prompt}" — keep it short and chat-like.`;
+          `"${chosenTopic.prompt}" — keep it short and chat-like. Keep the first question concrete and easy to answer.`;
       } else if (wrapUp) {
         prompt +=
           "\n\nThis is the final exchange. Thank the candidate briefly in 1 sentence. " +
@@ -284,7 +299,7 @@ export async function POST(req: NextRequest) {
       } else {
         prompt +=
           `\n\nThis is exchange ${exchangeCount} of up to ${WRITING_TASK3.meta.maxExchanges}. ` +
-          `Challenge their last response or probe deeper.`;
+          `Challenge their last response using one of the challenge types. Prefer a different challenge type from the previous turn unless repetition is necessary for repair.`;
       }
 
       const response = await openai.chat.completions.create({
@@ -309,11 +324,8 @@ export async function POST(req: NextRequest) {
         .replace(/<switch_ready>true<\/switch_ready>/g, "")
         .trim();
 
-      // If AI signals switch ready and no switch has happened yet,
-      // pick a switch topic and return it — frontend stores and sends back
       let nextSwitchTopic: TopicOption | null = null;
       if (switchReady && !switchTopicId) {
-        // Use broader tier first; if candidate is already on broader, use abstract
         const switchTier = switchTopic?.tier === "broader" ? "abstract" : "broader";
         nextSwitchTopic = pickSwitchTopic(switchTier, chosenTopicId);
       }
@@ -333,6 +345,11 @@ export async function POST(req: NextRequest) {
         .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
         .join("\n");
 
+      const candidateOnly = (messages || [])
+        .filter((m: Message) => m.role === "user")
+        .map((m: Message) => m.content)
+        .join("\n");
+
       const [functionRes, formRes] = await Promise.all([
         openai.chat.completions.create({
           model: "gpt-4o",
@@ -347,7 +364,7 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o",
           messages: [
             { role: "system", content: languageAnalysisPrompt },
-            { role: "user", content: `Here is the full transcript (candidate messages only):\n\n${transcript}` },
+            { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
           ],
           max_tokens: 2000,
           temperature: 0.1,

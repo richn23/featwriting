@@ -25,7 +25,6 @@ function pickRandomTopic(): Topic {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WRITING PROMPT SELECTION
-// Picks the right level-banded prompt based on Task 1 diagnosed level.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function pickWritingPrompt(topic: Topic, task1Level: string): string {
@@ -39,8 +38,6 @@ function pickWritingPrompt(topic: Topic, task1Level: string): string {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCAFFOLD CONVERSATION PROMPT
-// Task 2 Phase 1: warm-up chat on the topic. NOT assessed.
-// Candidate name and Task 1 level are injected so the AI can personalise.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildScaffoldPrompt(topic: Topic, candidateName: string, task1Level: string): string {
@@ -66,9 +63,11 @@ YOUR RULES:
 
 QUESTION QUALITY:
 - SHORT and DIRECT. No implied context.
-- At lower levels (A1–A2): maximum 8 words.
+- At lower levels (A1–A2): aim for short questions, usually under 10–12 words. Natural is more important than strict word count.
 - At higher levels: maximum 15 words. Still one clear question.
 - If they mention something specific, ask directly about that thing.
+- Encourage the candidate to recall a specific example or experience related to the topic — this prepares them for the writing task.
+- Do not ask yes/no questions. Ask questions that prompt a short story, memory, or description.
 
 At the end of EVERY response, add:
 <done>true</done> — if scaffolding is complete and they should move to writing
@@ -78,7 +77,6 @@ At the end of EVERY response, add:
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIAGNOSIS PROMPT
-// Scores the extended writing response against Task 2 macros.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildDiagnosisPrompt(): string {
@@ -110,13 +108,34 @@ function buildDiagnosisPrompt(): string {
 ═══ CONTEXT ═══
 
 The candidate wrote an extended response to a prompt. This is a WRITING test.
+Task goal: Inform & Narrate.
 
 Task 2 tests two functions:
-- INFORMING: Can the candidate convey information clearly in writing?
-- NARRATING: Can the candidate recount events, experiences, or sequences in writing?
+
+INFORMING involves:
+- providing factual information
+- describing situations, people, or things
+- explaining what something is or how it works
+
+NARRATING involves:
+- recounting past events or experiences
+- describing sequences of actions
+- telling what happened first, next, and after
+
+These two functions can blur — keep their definitions distinct when scoring.
 
 The topic is irrelevant to scoring — assess FUNCTION, not content.
+Do not reward creativity, interesting opinions, or topic knowledge. Only score communicative function in writing.
 Macros are topic-agnostic: the same macro applies whether writing about a holiday, a job, or a friend.
+
+═══ RELEVANCE CHECK ═══
+
+Before scoring, check: is the response clearly related to the prompt?
+If the response is entirely unrelated to the prompt — meaning there is clearly no attempt to address it (e.g. copy-paste, nonsense, random text) — score ALL macros as NOT_YET and note this in rationale. Do not trigger this rule for weak, messy, or partially relevant responses. Those should be scored normally.
+
+═══ LENGTH CHECK ═══
+
+If the response is extremely short (fewer than ~3 meaningful sentences), assume insufficient evidence for mid- and higher-level macros. Only basic lower-level macros may be scored CAN from minimal responses.
 
 ═══ MACROS TO ASSESS ═══
 
@@ -125,12 +144,12 @@ ${macroBlock}
 ═══ SCORING RULES ═══
 
 1. CAN = clear evidence in the writing that the candidate achieved this communicative function.
-2. NOT_YET = the writing attempted this function but did not achieve it clearly.
-3. NOT_TESTED = the writing had no opportunity to demonstrate this function.
-4. Be conservative: mixed evidence = NOT_YET.
-5. A single clear instance IS sufficient for CAN.
+2. NOT_YET = the writing attempted this function but did not achieve it clearly, or there is no evidence.
+3. NOT_TESTED = use ONLY when the task prompt clearly did not allow this function to appear. If the prompt allowed it but the candidate did not demonstrate it, score NOT_YET — not NOT_TESTED.
+4. Be conservative: mixed or ambiguous evidence = NOT_YET.
+5. A single clear instance under appropriate communicative demand may be sufficient for CAN. However, treat very short or minimal evidence cautiously — one accidental sentence is not sufficient.
 6. Multiple weak instances do NOT combine into CAN.
-7. Higher-level demonstration overrides lower-level gaps.
+7. Clear higher-level competence may support lower-level CAN judgements, but only when the lower-level function is a necessary prerequisite of what the candidate demonstrated.
 8. Score EVERY macro. Do not skip any.
 
 ═══ OUTPUT FORMAT ═══
@@ -206,7 +225,8 @@ export async function POST(req: NextRequest) {
       if (exchangeCount === 0) {
         prompt +=
           `\n\nThis is the START. Greet ${candidateName || "the candidate"} by name and ask the first ` +
-          `warm-up question about the topic. Keep it short and friendly. Add <done>false</done>.`;
+          `warm-up question about the topic. Ask about a specific memory or experience — not a yes/no question. ` +
+          `Keep it short and friendly. Add <done>false</done>.`;
       } else if (exchangeCount >= WRITING_TASK2.meta.scaffoldingExchanges - 1) {
         prompt +=
           `\n\nThis is the final scaffolding exchange. Wrap up warmly in 1 sentence and ` +
@@ -214,7 +234,8 @@ export async function POST(req: NextRequest) {
       } else {
         prompt +=
           `\n\nThis is scaffolding exchange ${exchangeCount}. Ask ONE short, direct follow-up ` +
-          `question about ${topic.label}. Stay on topic. Add <done>false</done>.`;
+          `question about ${topic.label}. Prompt them to recall a specific detail, moment, or experience. ` +
+          `Stay on topic. Add <done>false</done>.`;
       }
 
       const response = await openai.chat.completions.create({
@@ -235,7 +256,6 @@ export async function POST(req: NextRequest) {
         .replace(/<done>(true|false)<\/done>/g, "")
         .trim();
 
-      // Pick the level-appropriate writing prompt
       const writingPrompt = pickWritingPrompt(topic, task1Level || "A1");
 
       return NextResponse.json({ message: aiMessage, scaffoldDone, topic, writingPrompt });

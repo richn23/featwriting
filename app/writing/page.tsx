@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { getTaskScore, getHighestConfirmedLevel, getTotalScore, getScoreLabel, TASK_NAMES, TASK_CEILINGS, type TaskKey } from "../writing/task-scoring";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -189,8 +188,8 @@ body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(
 .typing-bubble .dot { width:7px; height:7px; background:#90a4ae; border-radius:50%; animation:typingDot 1.2s ease infinite }
 .typing-bubble .dot:nth-child(2) { animation-delay:.15s }
 .typing-bubble .dot:nth-child(3) { animation-delay:.3s }
-.chat-input-area { padding:8px 10px; background:#f0f0f0; display:flex; align-items:flex-end; gap:8px; flex-shrink:0; border-top:1px solid rgba(0,0,0,.06) }
-.chat-text-input { flex:1; padding:10px 16px; font-family:'DM Sans',sans-serif; font-size:.875rem; background:white; border:none; border-radius:18px; outline:none; color:var(--ink); resize:none; overflow-y:auto; max-height:120px; min-height:40px; line-height:1.4; display:block }
+.chat-input-area { padding:8px 10px; background:#f0f0f0; display:flex; align-items:center; gap:8px; flex-shrink:0; border-top:1px solid rgba(0,0,0,.06) }
+.chat-text-input { flex:1; padding:10px 16px; font-family:'DM Sans',sans-serif; font-size:.875rem; background:white; border:none; border-radius:24px; outline:none; color:var(--ink) }
 .chat-text-input::placeholder { color:#9ca3af }
 .chat-text-input:disabled { opacity:.5; cursor:not-allowed }
 .chat-send-btn { width:40px; height:40px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s ease; flex-shrink:0; color:white }
@@ -552,12 +551,12 @@ export default function WritingTestPage() {
   const [t1Input, setT1Input] = useState("");
   const [t1Processing, setT1Processing] = useState(false);
   const [t1ExchangeCount, setT1ExchangeCount] = useState(0);
-  const [taskScores, setTaskScores] = useState<Partial<Record<TaskKey, number>>>({});
   const [t1Diagnosis, setT1Diagnosis] = useState<Diagnosis | null>(null);
   const [t1Form, setT1Form] = useState<FormAnalysis | null>(null);
   const [t1Expanded, setT1Expanded] = useState<Set<string>>(new Set());
   const [t1ShowTranscript, setT1ShowTranscript] = useState(false);
   const t1DoneRef = useRef(false);
+  const [t1Stage, setT1Stage] = useState<number>(0);
 
   // Task 2 state
   const [t2Config, setT2Config] = useState<TaskConfig | null>(null);
@@ -616,7 +615,7 @@ export default function WritingTestPage() {
   const t5DoneRef = useRef(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   /* ── Load configs ──────────────────────────────────────────────────── */
@@ -651,9 +650,10 @@ export default function WritingTestPage() {
 
   const startT1 = async () => {
     t1DoneRef.current = false;
+    setT1Stage(0);
     setPhase("t1-conversation");
     setT1Processing(true);
-    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [], exchangeCount: 0 }) });
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [], exchangeCount: 0, stage: 0 }) });
     const data = await res.json();
     setT1Messages([{ role: "assistant", content: data.message }]);
     setT1Processing(false);
@@ -663,7 +663,6 @@ export default function WritingTestPage() {
   const sendT1 = async () => {
     const text = t1Input.trim();
     if (!text || t1Processing || t1DoneRef.current) return;
-    if (text.toLowerCase() === "exit please") { setT1Input(""); await finishT1([...t1Messages], t1ExchangeCount); return; }
     setT1Input(""); setT1Processing(true);
     const userMsg: Message = { role: "user", content: text };
     const newMsgs = [...t1Messages, userMsg];
@@ -672,8 +671,9 @@ export default function WritingTestPage() {
     setT1ExchangeCount(nextCount);
     if (!t1Config) return;
     if (nextCount >= (t1Config.meta.maxExchanges || 12)) { await finishT1(newMsgs, nextCount); return; }
-    const chatRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMsgs, exchangeCount: nextCount }) });
+    const chatRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMsgs, exchangeCount: nextCount, stage: t1Stage }) });
     const data = await chatRes.json();
+    if (data.stage !== undefined) setT1Stage(data.stage);
     const updated = [...newMsgs, { role: "assistant" as const, content: data.message }];
     setT1Messages(updated);
     if (data.ceilingReached && nextCount >= MIN_EXCHANGES) { t1DoneRef.current = true; setT1Processing(false); await runT1Diagnosis(updated); return; }
@@ -683,7 +683,7 @@ export default function WritingTestPage() {
 
   const finishT1 = async (msgs: Message[], count: number) => {
     t1DoneRef.current = true;
-    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, exchangeCount: count, wrapUp: true }) });
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, exchangeCount: count, wrapUp: true, stage: t1Stage }) });
     const data = await res.json();
     const all = [...msgs, { role: "assistant" as const, content: data.message }];
     setT1Messages(all); setT1Processing(false);
@@ -695,7 +695,7 @@ export default function WritingTestPage() {
     try {
       const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose" }) });
       const data = await res.json();
-      if (data.diagnosis) { setT1Diagnosis(data.diagnosis); if (data.formAnalysis) setT1Form(data.formAnalysis); setTaskScores(prev => ({ ...prev, task1: getTaskScore("task1", data.diagnosis.diagnosedLevel) })); }
+      if (data.diagnosis) { setT1Diagnosis(data.diagnosis); if (data.formAnalysis) setT1Form(data.formAnalysis); }
       setPhase("t1-results");
     } catch { setPhase("t1-results"); }
   };
@@ -719,7 +719,6 @@ export default function WritingTestPage() {
   const sendT2Scaffold = async () => {
     const text = t2ScaffoldInput.trim();
     if (!text || t2ScaffoldProcessing || t2ScaffoldDoneRef.current) return;
-    if (text.toLowerCase() === "exit please") { setT2ScaffoldInput(""); setPhase("t2-generating-prompt"); return; }
     setT2ScaffoldInput(""); setT2ScaffoldProcessing(true);
     const userMsg: Message = { role: "user", content: text };
     const newMsgs = [...t2ScaffoldMsgs, userMsg];
@@ -766,7 +765,7 @@ export default function WritingTestPage() {
         body: JSON.stringify({ action: "diagnose", writtenText: t2WrittenText }),
       });
       const data = await res.json();
-      if (data.diagnosis) { setT2Diagnosis(data.diagnosis); if (data.formAnalysis) setT2Form(data.formAnalysis); setTaskScores(prev => ({ ...prev, task2: getTaskScore("task2", data.diagnosis.diagnosedLevel) })); }
+      if (data.diagnosis) { setT2Diagnosis(data.diagnosis); if (data.formAnalysis) setT2Form(data.formAnalysis); }
       setPhase("t2-results");
     } catch { setPhase("t2-results"); }
   };
@@ -810,7 +809,6 @@ export default function WritingTestPage() {
   const sendT3 = async () => {
     const text = t3Input.trim();
     if (!text || t3Processing || t3DoneRef.current) return;
-    if (text.toLowerCase() === "exit please") { setT3Input(""); await finishT3([...t3Messages], t3ExchangeCount); return; }
     setT3Input(""); setT3Processing(true);
     const userMsg: Message = { role: "user", content: text };
     const newMsgs = [...t3Messages, userMsg];
@@ -865,7 +863,7 @@ export default function WritingTestPage() {
         body: JSON.stringify({ messages: finalMsgs, action: "diagnose" }),
       });
       const data = await res.json();
-      if (data.diagnosis) { setT3Diagnosis(data.diagnosis); if (data.formAnalysis) setT3Form(data.formAnalysis); setTaskScores(prev => ({ ...prev, task3: getTaskScore("task3", data.diagnosis.diagnosedLevel) })); }
+      if (data.diagnosis) { setT3Diagnosis(data.diagnosis); if (data.formAnalysis) setT3Form(data.formAnalysis); }
       setPhase("t3-results");
     } catch { setPhase("t3-results"); }
   };
@@ -907,7 +905,7 @@ export default function WritingTestPage() {
         body: JSON.stringify({ action: "diagnose", responses }),
       });
       const data = await res.json();
-      if (data.diagnosis) { setT4Diagnosis(data.diagnosis); if (data.formAnalysis) setT4Form(data.formAnalysis); setTaskScores(prev => ({ ...prev, task4: getTaskScore("task4", data.diagnosis.diagnosedLevel) })); }
+      if (data.diagnosis) { setT4Diagnosis(data.diagnosis); if (data.formAnalysis) setT4Form(data.formAnalysis); }
       setPhase("t4-results");
     } catch { setPhase("t4-results"); }
   };
@@ -939,7 +937,6 @@ export default function WritingTestPage() {
   const sendT5 = async () => {
     const text = t5Input.trim();
     if (!text || t5Processing || t5DoneRef.current) return;
-    if (text.toLowerCase() === "exit please") { setT5Input(""); await finishT5([...t5Messages], t5ExchangeCount); return; }
     setT5Input(""); setT5Processing(true);
     const userMsg: Message = { role: "user", content: text };
     const newMsgs = [...t5Messages, userMsg];
@@ -985,7 +982,7 @@ export default function WritingTestPage() {
         body: JSON.stringify({ messages: finalMsgs, action: "diagnose" }),
       });
       const data = await res.json();
-      if (data.diagnosis) { setT5Diagnosis(data.diagnosis); if (data.formAnalysis) setT5Form(data.formAnalysis); setTaskScores(prev => ({ ...prev, task5: getTaskScore("task5", data.diagnosis.diagnosedLevel) })); }
+      if (data.diagnosis) { setT5Diagnosis(data.diagnosis); if (data.formAnalysis) setT5Form(data.formAnalysis); }
       setPhase("t5-results");
     } catch { setPhase("t5-results"); }
   };
@@ -1019,15 +1016,12 @@ export default function WritingTestPage() {
   /* ── Shared rendering helpers ──────────────────────────────────────── */
 
   const renderResultsDashboard = (
-    taskLabel: string, taskNum: number, taskKey: TaskKey, config: TaskConfig, diagnosis: Diagnosis | null, form: FormAnalysis | null,
+    taskLabel: string, taskNum: number, config: TaskConfig, diagnosis: Diagnosis | null, form: FormAnalysis | null,
     expanded: Set<string>, setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>,
     showTranscript: boolean, setShowTranscript: React.Dispatch<React.SetStateAction<boolean>>,
     messages: Message[], nextAction?: () => void, nextLabel?: string,
     writtenText?: string, showWriting?: boolean, setShowWriting?: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
-    const taskScore = taskScores[taskKey] ?? null;
-    const scoreLabel = taskScore !== null ? getScoreLabel(taskScore) : null;
-    const ceiling = TASK_CEILINGS[taskKey];
     const toggleLevel = (level: string) => {
       setExpanded(prev => { const next = new Set(prev); if (next.has(level)) next.delete(level); else next.add(level); return next; });
     };
@@ -1049,8 +1043,7 @@ export default function WritingTestPage() {
             <p className="hero-subtitle">Function (what the candidate did), decision logic (evidence), and language quality (form).</p>
           </div>
           <div className="hero-levels">
-            {taskScore !== null && (<><div className="hero-level-block"><div className="hero-level-label">Performance</div><div className="hero-level-value function-level" style={{ fontSize: "2.6rem" }}>{taskScore}<span style={{ fontSize: "1.2rem", color: "var(--muted)", fontFamily: "var(--font-sans)" }}> / 10</span></div><div style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: "4px", textAlign: "center" }}>{scoreLabel}</div></div><div className="hero-level-divider" /></>)}
-            <div className="hero-level-block"><div className="hero-level-label">Function Level</div><div className="hero-level-value function-level">{diagnosis?.diagnosedLevel ?? "—"}</div><div style={{ fontSize: ".65rem", color: "var(--muted)", marginTop: "4px", textAlign: "center" }}>ceiling: {ceiling}</div></div>
+            <div className="hero-level-block"><div className="hero-level-label">Function</div><div className="hero-level-value function-level">{diagnosis?.diagnosedLevel ?? "—"}</div></div>
             <div className="hero-level-divider" />
             <div className="hero-level-block"><div className="hero-level-label">Form</div><div className="hero-level-value form-level">{form?.overallFormLevel ?? "—"}</div></div>
           </div>
@@ -1091,7 +1084,7 @@ export default function WritingTestPage() {
                       if (!macro) return null;
                       const v = result?.result ?? "NOT_TESTED";
                       const tc = v === "CAN" ? "can" : v === "NOT_YET" ? "not-yet" : "not-tested";
-                      return (<div key={macro.azeId} className="macro-item"><div className="macro-top-row"><span className={`verdict-tag ${tc}`}>{v === "CAN" ? "CAN" : v === "NOT_YET" ? "Not Demonstrated" : "—"}</span><div style={{ flex: 1 }}><div className="macro-claim-text">{macro.claim}</div><div className="macro-meta"><span className="macro-fn-tag">{macro.fn}</span><span className="macro-id-tag">{macro.azeId}</span></div></div></div>{result?.rationale && <p className="macro-rationale">{result.rationale}</p>}{result?.evidence && <p className="macro-evidence">&ldquo;{result.evidence}&rdquo;</p>}</div>);
+                      return (<div key={macro.azeId} className="macro-item"><div className="macro-top-row"><span className={`verdict-tag ${tc}`}>{v === "CAN" ? "CAN" : v === "NOT_YET" ? "NOT YET" : "—"}</span><div style={{ flex: 1 }}><div className="macro-claim-text">{macro.claim}</div><div className="macro-meta"><span className="macro-fn-tag">{macro.fn}</span><span className="macro-id-tag">{macro.azeId}</span></div></div></div>{result?.rationale && <p className="macro-rationale">{result.rationale}</p>}{result?.evidence && <p className="macro-evidence">&ldquo;{result.evidence}&rdquo;</p>}</div>);
                     })}</div>}
                   </div>
                 );
@@ -1161,7 +1154,7 @@ export default function WritingTestPage() {
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
-            <textarea ref={inputRef as React.RefObject<HTMLTextAreaElement>} value={input} onChange={e => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFn(); } }} placeholder={doneRef.current ? "Chat complete" : processing ? "Waiting…" : "Type a message…"} disabled={processing || doneRef.current} className="chat-text-input" rows={1} />
+            <input ref={inputRef} type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFn(); } }} placeholder={doneRef.current ? "Chat complete" : processing ? "Waiting…" : "Type a message…"} disabled={processing || doneRef.current} className="chat-text-input" />
             <button onClick={sendFn} disabled={!input.trim() || processing || doneRef.current} className="chat-send-btn" style={{ background: input.trim() ? "var(--accent)" : "#d1d5db" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
@@ -1214,12 +1207,12 @@ export default function WritingTestPage() {
         <div className="landing-card">
           <div className="landing-card-icon">🎯</div>
           <h3>What We Assess</h3>
-          <p>Each writing task targets specific CEFR-aligned communicative functions. Scoring is binary — CAN or Not Demonstrated — based on observable evidence. Did the candidate achieve the communicative goal? Not &ldquo;did they follow the genre template.&rdquo;</p>
+          <p>Each writing task targets specific CEFR-aligned communicative functions. Scoring is binary — CAN or NOT YET — based on observable evidence. Did the candidate achieve the communicative goal? Not &ldquo;did they follow the genre template.&rdquo;</p>
         </div>
         <div className="landing-card">
           <div className="landing-card-icon">📊</div>
           <h3>Two Reports, Complete Picture</h3>
-          <p><strong>Report 1: Function</strong> — what the candidate can do (CAN/Not Demonstrated per function). <strong>Report 2: Form</strong> — how well they use language (grammar, vocabulary, coherence). Function tells you what. Form tells you how.</p>
+          <p><strong>Report 1: Function</strong> — what the candidate can do (CAN/NOT YET per function). <strong>Report 2: Form</strong> — how well they use language (grammar, vocabulary, coherence). Function tells you what. Form tells you how.</p>
         </div>
       </div>
 
@@ -1267,7 +1260,7 @@ export default function WritingTestPage() {
       <p className="briefing-sub">Text chat · Interactional &amp; Informing · 3–4 minutes</p>
       <div className="briefing-section"><h3>What you&apos;ll do</h3><p>Have a text conversation with the AI examiner — like WhatsApp or iMessage. It starts simple (name, where you&apos;re from) and gets harder based on how you write.</p></div>
       <div className="briefing-section"><h3>How the AI will act</h3><p>The AI probes upward when you write comfortably, stays or goes easier when you struggle, and creates conditions to test your written interaction.</p></div>
-      <div className="briefing-section"><h3>How it&apos;s assessed</h3><p>Each CEFR level has descriptors scored as <strong>CAN</strong> or <strong>Not Demonstrated</strong> with evidence from your messages.</p></div>
+      <div className="briefing-section"><h3>How it&apos;s assessed</h3><p>Each CEFR level has descriptors scored as <strong>CAN</strong> or <strong>NOT YET</strong> with evidence from your messages.</p></div>
       <button onClick={startT1} className="btn-start">Start Chat <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
     </div></main>
   );
@@ -1282,7 +1275,7 @@ export default function WritingTestPage() {
   if (phase === "t1-results") return wrap(
     <main className="results-page">
       {renderResultsDashboard(
-        "Task 1 · Diagnostic Results", 1, "task1", t1Config, t1Diagnosis, t1Form,
+        "Task 1 · Diagnostic Results", 1, t1Config, t1Diagnosis, t1Form,
         t1Expanded, setT1Expanded, t1ShowTranscript, setT1ShowTranscript, t1Messages,
         () => setPhase("t2-briefing"), "Continue to Task 2 →"
       )}
@@ -1334,7 +1327,7 @@ export default function WritingTestPage() {
   if (phase === "t2-results" && t2Config) return wrap(
     <main className="results-page">
       {renderResultsDashboard(
-        "Task 2 · Inform & Narrate Results", 2, "task2", t2Config, t2Diagnosis, t2Form,
+        "Task 2 · Inform & Narrate Results", 2, t2Config, t2Diagnosis, t2Form,
         t2Expanded, setT2Expanded, t2ShowTranscript, setT2ShowTranscript, t2ScaffoldMsgs,
         () => setPhase("t3-briefing"), "Continue to Task 3 →",
         t2WrittenText, t2ShowWriting, setT2ShowWriting
@@ -1388,7 +1381,7 @@ export default function WritingTestPage() {
   if (phase === "t3-results" && t3Config) return wrap(
     <main className="results-page">
       {renderResultsDashboard(
-        "Task 3 · Express & Argue Results", 3, "task3", t3Config, t3Diagnosis, t3Form,
+        "Task 3 · Express & Argue Results", 3, t3Config, t3Diagnosis, t3Form,
         t3Expanded, setT3Expanded, t3ShowTranscript, setT3ShowTranscript, t3Messages,
         () => setPhase("t4-briefing"), "Continue to Task 4 →"
       )}
@@ -1479,7 +1472,7 @@ export default function WritingTestPage() {
     return wrap(
       <main className="results-page">
         {renderResultsDashboard(
-          "Task 4 · Rephrase & Adjust Results", 4, "task4", t4Config, t4Diagnosis, t4Form,
+          "Task 4 · Rephrase & Adjust Results", 4, t4Config, t4Diagnosis, t4Form,
           t4Expanded, setT4Expanded, t4ShowTranscript, setT4ShowTranscript, t4TranscriptMsgs,
           () => setPhase("t5-briefing"), "Continue to Task 5 →"
         )}
@@ -1523,7 +1516,7 @@ export default function WritingTestPage() {
   if (phase === "t5-results" && t5Config) return wrap(
     <main className="results-page">
       {renderResultsDashboard(
-        "Task 5 · Compare & Advise Results", 5, "task5", t5Config, t5Diagnosis, t5Form,
+        "Task 5 · Compare & Advise Results", 5, t5Config, t5Diagnosis, t5Form,
         t5Expanded, setT5Expanded, t5ShowTranscript, setT5ShowTranscript, t5Messages,
         () => setPhase("final-report"), "View Full Report →"
       )}
@@ -1618,25 +1611,6 @@ export default function WritingTestPage() {
       return Math.round((i / 10) * 100);
     };
 
-    // Task scores summary
-    const taskScoreSummary: { key: TaskKey; name: string; score: number | null; fnLevel: string }[] = [
-      { key: "task1", name: "Diagnostic Chat",    score: taskScores.task1 ?? null, fnLevel: t1Diagnosis?.diagnosedLevel ?? "—" },
-      { key: "task2", name: "Narrative Writing",  score: taskScores.task2 ?? null, fnLevel: t2Diagnosis?.diagnosedLevel ?? "—" },
-      { key: "task3", name: "Debate",             score: taskScores.task3 ?? null, fnLevel: t3Diagnosis?.diagnosedLevel ?? "—" },
-      { key: "task4", name: "Mediation",          score: taskScores.task4 ?? null, fnLevel: t4Diagnosis?.diagnosedLevel ?? "—" },
-      { key: "task5", name: "Advice Task",        score: taskScores.task5 ?? null, fnLevel: t5Diagnosis?.diagnosedLevel ?? "—" },
-    ].filter(t => t.score !== null);
-
-    const allTaskLevels: Partial<Record<TaskKey, string>> = {
-      task1: t1Diagnosis?.diagnosedLevel,
-      task2: t2Diagnosis?.diagnosedLevel,
-      task3: t3Diagnosis?.diagnosedLevel,
-      task4: t4Diagnosis?.diagnosedLevel,
-      task5: t5Diagnosis?.diagnosedLevel,
-    };
-    const highestConfirmed = getHighestConfirmedLevel(allTaskLevels);
-    const { total: scoreTotal, maxPossible: scoreMax } = getTotalScore(taskScores);
-
     return wrap(
       <main className="report-page">
         <nav className="report-nav">
@@ -1647,40 +1621,16 @@ export default function WritingTestPage() {
         <div className="report-hero animate-fade-up">
           <div className="report-hero-eyebrow">Assessment Complete</div>
           <h1 className="report-hero-title">Your <em>Writing Profile</em></h1>
-          <p className="report-hero-sub">{taskScoreSummary.length} tasks · {fnSummary.length} functions tested · {formSummary.length} language dimensions</p>
+          <p className="report-hero-sub">5 tasks · {fnSummary.length} functions tested · {formSummary.length} language dimensions</p>
           <div className="report-overall">
             <div className="report-overall-item">
-              <div className="report-overall-label">Highest Confirmed Level</div>
-              <div className="report-overall-value fn">{highestConfirmed}</div>
-              <div style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: "4px" }}>across all tasks</div>
-            </div>
-            <div className="report-divider" />
-            <div className="report-overall-item">
-              <div className="report-overall-label">Total Score</div>
-              <div className="report-overall-value fn" style={{ color: "var(--accent)" }}>{scoreTotal}<span style={{ fontSize: "1.2rem", color: "var(--muted)", fontFamily: "var(--font-sans)" }}> / {scoreMax}</span></div>
-              <div style={{ fontSize: ".7rem", color: "var(--muted)", marginTop: "4px" }}>performance</div>
+              <div className="report-overall-label">Function Level</div>
+              <div className="report-overall-value fn">{overallFn}</div>
             </div>
             <div className="report-divider" />
             <div className="report-overall-item">
               <div className="report-overall-label">Language Level</div>
               <div className="report-overall-value form">{overallForm}</div>
-            </div>
-          </div>
-
-          {/* Task scores table */}
-          <div style={{ marginTop: "32px", width: "100%", maxWidth: "560px" }}>
-            <div style={{ fontSize: ".65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--muted)", marginBottom: "12px" }}>Task Scores</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {taskScoreSummary.map(t => (
-                <div key={t.key} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{ flex: 1, fontSize: ".82rem", color: "var(--ink)" }}>{t.name}</div>
-                  <div style={{ fontSize: ".75rem", color: "var(--muted)", width: "40px", textAlign: "right" }}>{t.fnLevel}</div>
-                  <div style={{ width: "120px", height: "6px", background: "var(--separator)", borderRadius: "3px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${((t.score ?? 0) / 10) * 100}%`, background: "var(--accent)", borderRadius: "3px", transition: "width .8s ease" }} />
-                  </div>
-                  <div style={{ fontSize: ".9rem", fontWeight: 700, color: "var(--accent)", width: "42px", textAlign: "right" }}>{t.score} <span style={{ fontSize: ".65rem", fontWeight: 400, color: "var(--muted)" }}>/ 10</span></div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -1692,7 +1642,7 @@ export default function WritingTestPage() {
               <div className="report-panel-icon fn">📋</div>
               <div>
                 <div className="report-panel-title">What You Can Do</div>
-                <div className="report-panel-sub">Communicative functions · CAN / Not Demonstrated</div>
+                <div className="report-panel-sub">Communicative functions · CAN / NOT YET</div>
               </div>
             </div>
             {fnSummary.map((f, i) => (
