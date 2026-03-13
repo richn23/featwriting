@@ -1,7 +1,4 @@
 
-Writing task3 chat route · TS
-Copy
-
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK3, TopicOption } from "../../writing/writing-task3-descriptors";
