@@ -182,7 +182,11 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 }
 .landing-hero-anchor {
   font-size:.95rem; line-height:1.55; color:var(--s-text-muted);
-  max-width:560px; margin:0 auto 24px; font-weight:500;
+  max-width:560px; margin:0 auto 14px; font-weight:500;
+}
+.landing-hero-hook {
+  font-size:1.02rem; line-height:1.65; color:var(--s-text-muted);
+  max-width:600px; margin:0 auto 22px; font-weight:500;
 }
 .landing-hero-title {
   font-family:'DM Serif Display',serif;
@@ -1946,6 +1950,9 @@ export default function WritingTestPage() {
         <div className="landing-hero-eyebrow">FEAT Writing Test</div>
         <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
         <p className="landing-hero-anchor">FEAT is a function-based writing assessment.</p>
+        <p className="landing-hero-hook">
+          FEAT assesses writing through what learners actually do with language — explaining, interacting, and justifying — rather than a single fixed text type.
+        </p>
         <p className="landing-hero-sub">It measures what candidates can do with language, not just whether they can follow the conventions of a particular text type.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
@@ -1982,7 +1989,9 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
         <div className="landing-section-label">A different approach</div>
         <div className="landing-section-body">
-          <p>FEAT starts from what learners are trying to do with language. It tests those ideas in live back-and-forth tasks, not only through a single static prompt.</p>
+          <p>
+            FEAT starts from what learners are trying to do with language. It tests those ideas in live back-and-forth tasks, not only through a single static prompt. This is still a writing assessment. The difference is that writing is tested as interaction, not as a single static response.
+          </p>
           <div className="landing-contrast">
             <p className="not">Instead of asking someone to write an essay about technology,</p>
             <p className="but">ask them to explain an idea to someone who does not understand it.</p>
@@ -1991,6 +2000,38 @@ export default function WritingTestPage() {
           <p>The AI does more than prompt. It responds, asks follow-ups, challenges you, and sometimes misunderstands on purpose.</p>
           <p>That makes strengths and limits in writing easier to see.</p>
           <p>Level comes from patterns of evidence across the session. You get a structured diagnosis, not one isolated task score.</p>
+        </div>
+      </section>
+
+      {/* A familiar model */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "212ms" }}>
+        <div className="landing-section-label">A familiar model</div>
+        <div className="landing-section-body">
+          <p>This approach is not new.</p>
+          <p>In vocational training, people are assessed on what they can do, not just what they know. A mechanic is asked to fix an engine. A chef is asked to prepare a dish.</p>
+          <p>Language can be assessed in the same way. Not by reproducing a format, but by showing how it is used in practice.</p>
+        </div>
+      </section>
+
+      {/* Consistency by design */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "225ms" }}>
+        <div className="landing-section-label">Consistency by design</div>
+        <div className="landing-section-body">
+          <p>Interactions are adaptive, but controlled.</p>
+          <p>Each task follows a defined structure. The system varies prompts and challenges within set parameters to ensure comparable difficulty.</p>
+          <p>Evidence is gathered across multiple tasks and mapped to CEFR descriptors. The result is not based on a single response, but on consistent patterns of behaviour.</p>
+        </div>
+      </section>
+
+      {/* Designed for real assessment conditions */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "237ms" }}>
+        <div className="landing-section-label">Designed for real assessment conditions</div>
+        <div className="landing-section-body">
+          <p>A function-based assessment introduces different challenges. These have been considered in the design.</p>
+          <p>Interaction is structured to assess language, not speed. Candidates are given time to respond, and performance is evaluated across patterns of language use, not individual responses.</p>
+          <p>AI interaction is adaptive, but controlled. Tasks follow defined structures, and variation is kept within set parameters to ensure comparable difficulty.</p>
+          <p>The system focuses on observable behaviour. Scoring is based on what candidates demonstrate across tasks, rather than single responses or impressions.</p>
+          <p>Task design balances different demands. The sequence of tasks is intended to reflect real-world writing while remaining manageable within an assessment setting.</p>
         </div>
       </section>
 
