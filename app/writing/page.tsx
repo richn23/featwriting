@@ -90,7 +90,7 @@ const T4_API = "/api/writing-task4-chat";
 const T5_API = "/api/writing-task5-chat";
 
 const FEAT_DEMO_ACCESS_KEY = "feat_demo_access";
-const FEAT_DEMO_ACCESS_CODE = "4031982";
+const FEAT_DEMO_ACCESS_CODE = "04031982";
 
 function hasDemoAccess(): boolean {
   if (typeof window === "undefined") return false;
@@ -188,7 +188,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
   font-family:'DM Serif Display',serif;
   font-size:clamp(2.4rem, 5vw, 3.6rem);
   font-weight:400; letter-spacing:-.03em; line-height:1.1;
-  color:var(--s-text); margin-bottom:20px;
+  color:var(--s-text); margin-bottom:12px;
 }
 .landing-hero-title em { color:var(--s-accent); font-style:italic }
 .landing-hero-sub {
@@ -1943,9 +1943,9 @@ export default function WritingTestPage() {
       {/* Hero */}
       <section className="landing-hero animate-fade-up">
         <div className="landing-hero-eyebrow">FEAT Writing Test</div>
-        <p className="landing-hero-anchor">FEAT is a function-based writing assessment.</p>
         <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
-        <p className="landing-hero-sub">A function-based approach that measures what candidates can do with language — not only whether they can reproduce the conventions of a particular text type.</p>
+        <p className="landing-hero-anchor">FEAT is a function-based writing assessment.</p>
+        <p className="landing-hero-sub">A function-based approach that measures what candidates can do with language. It is not just whether they can follow the conventions of a particular text type.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -1956,10 +1956,10 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "100ms" }}>
         <div className="landing-section-label">The problem</div>
         <div className="landing-section-body">
-          <p>Writing has changed. Most people write more today than any previous generation — not with pen and paper, but through messages, captions, comments, and replies. Writing is how we manage relationships, navigate work, and participate in the world.</p>
+          <p>Writing has changed. Most people write more today than any previous generation. They do it through messages, captions, comments, and replies, not pen and paper. Writing is how we manage relationships, navigate work, and take part in the world.</p>
           <p>But writing assessment has changed more slowly.</p>
-          <p>Most tests still ask candidates to produce a genre — an essay, a report, a formal letter. The underlying question becomes: can you produce the right kind of text? Format. Structure. Register. Product.</p>
-          <p>This is genre-based testing. It captures important skills — but only part of what it means to communicate in writing.</p>
+          <p>Most tests still ask candidates to produce a genre: an essay, a report, a formal letter. The question becomes: can you produce the right kind of text? Format. Structure. Register. Product.</p>
+          <p>This is genre-based testing. It captures important skills, but only part of what it means to communicate in writing.</p>
         </div>
       </section>
 
@@ -1967,9 +1967,9 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "150ms" }}>
         <div className="landing-section-label">The gap</div>
         <div className="landing-section-body">
-          <p>CEFR takes a different approach. Its descriptors are function-based — can the learner inform, express, argue, interact?</p>
-          <p>But many assessments aligned to CEFR are still built around genre tasks — a timed essay, a formal complaint, a report on a graph.</p>
-          <p>The construct and the task do not always fully align — and a function-based writing assessment can narrow that gap.</p>
+          <p>CEFR takes a different approach. Its descriptors are function-based: can the learner inform, express, argue, interact?</p>
+          <p>But many assessments aligned to CEFR are still built around genre tasks, like a timed essay, a formal complaint, or a report on a graph.</p>
+          <p>What the test claims to measure and what it actually tests don&apos;t always match. A function-based writing assessment can narrow that gap.</p>
         </div>
       </section>
 
@@ -1977,14 +1977,15 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
         <div className="landing-section-label">A different approach</div>
         <div className="landing-section-body">
-          <p>This function-based writing assessment starts from the communicative functions described in CEFR — and tests them more directly, through interaction.</p>
+          <p>FEAT starts from how CEFR describes communicative purpose. It tests those ideas in live back-and-forth tasks, not only through a single static prompt.</p>
           <div className="landing-contrast">
-            <p className="not">Write an essay about technology.</p>
-            <p className="but">Explain an idea to someone who does not understand it. Justify your view when challenged. Clarify when your meaning is not clear.</p>
+            <p className="not">Instead of asking someone to write an essay about technology,</p>
+            <p className="but">ask them to explain an idea to someone who does not understand it.</p>
           </div>
-          <p>The AI does not just prompt. It responds, asks follow-ups, challenges, and occasionally introduces misunderstanding.</p>
-          <p>This creates conditions where writing ability — and its limits — become visible.</p>
-          <p>Level is determined from patterns of evidence across the interaction. Not a single task score, but a structured diagnosis.</p>
+          <p>They may need to justify a view when challenged, or clarify when something lands wrong.</p>
+          <p>The AI does more than prompt. It responds, asks follow-ups, challenges you, and sometimes misunderstands on purpose.</p>
+          <p>That makes strengths and limits in writing easier to see.</p>
+          <p>Level comes from patterns of evidence across the session. You get a structured diagnosis, not one isolated task score.</p>
         </div>
       </section>
 
@@ -1994,9 +1995,9 @@ export default function WritingTestPage() {
           <div className="landing-split-block-label">What this assessment does</div>
           <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Assessing writing as communication, not just formatted text</div>
           <div className="landing-split-block-body">
-            <p>The assessment focuses on what the learner is trying to do with language — informing, explaining, narrating, justifying, adjusting for audience — and gathers evidence through interaction-based tasks.</p>
-            <p>Rather than relying on a single extended response in one fixed genre, this approach builds a broader picture of ability across multiple communicative demands.</p>
-            <p>That keeps the function-based construct front and centre, while remaining closely aligned to CEFR.</p>
+            <p>The assessment looks at what learners are trying to do with language: informing, explaining, narrating, justifying, adjusting for audience. Evidence comes from tasks where they write in real time and respond to the system.</p>
+            <p>Instead of one long answer in a single genre, you get a wider picture of how they handle different demands.</p>
+            <p>That keeps the focus on function and stays close to CEFR.</p>
           </div>
         </div>
         <div className="landing-split-right">
@@ -2004,8 +2005,8 @@ export default function WritingTestPage() {
             <div className="landing-split-block-label">How it works</div>
             <div className="landing-split-block-title">Grounded in established frameworks</div>
             <div className="landing-split-block-body">
-              <p>This approach starts with communicative descriptors from CEFR and GSE. These are grouped into broader communicative functions — informing, explaining, justifying, interacting — and translated into observable behaviours that can be elicited through interaction.</p>
-              <p>During a session, the system gathers evidence across these functions and maps performance back to CEFR levels. The result is not a single task score, but a structured profile of what the learner can do.</p>
+              <p>We start from communicative descriptors in CEFR and GSE. We group them into broader purposes (informing, explaining, justifying, interacting) and turn them into behaviours we can test through interaction.</p>
+              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You do not get one overall task score. You get a profile of what the learner can do.</p>
             </div>
           </div>
           <div className="landing-split-block">
@@ -2017,11 +2018,11 @@ export default function WritingTestPage() {
             <div className="landing-outputs">
               <div className="landing-output-item">
                 <div className="landing-output-item-label fn">Function profile</div>
-                <div className="landing-output-item-desc">What the learner can do — their ability to communicate across interactional, informing, arguing, and mediating functions.</div>
+                <div className="landing-output-item-desc">What the learner can do: their ability across interactional, informing, arguing, and mediating functions.</div>
               </div>
               <div className="landing-output-item">
                 <div className="landing-output-item-label form">Language profile</div>
-                <div className="landing-output-item-desc">How effectively they do it — control of grammar, vocabulary, coherence, and register.</div>
+                <div className="landing-output-item-desc">How effectively they do it: control of grammar, vocabulary, coherence, and register.</div>
               </div>
             </div>
           </div>
@@ -2033,9 +2034,9 @@ export default function WritingTestPage() {
         <div className="landing-principle-inner">
           <div className="landing-principle-label">Design principle</div>
           <div className="landing-principle-text">
-            <p>Writing is assessed as communication, not just as formatted product. The aim is to evaluate what a learner can express and achieve with language, beyond adherence to specific genre conventions.</p>
-            <p>The assessment is not designed to replace every form of writing assessment. Academic writing, professional genres, and extended composition remain important and require dedicated instruments.</p>
-            <p>For general English assessment, however, communicative functions provide a flexible and CEFR-aligned way to diagnose ability without relying exclusively on specific genres.</p>
+            <p>Writing is assessed as communication, not just as formatted product. The aim is to see what a learner can express and achieve with language, beyond sticking to a particular genre template.</p>
+            <p>The assessment is not designed to replace every form of writing assessment. Academic writing, professional genres, and extended composition remain important and need their own tools.</p>
+            <p>For general English, looking at purpose and how people use language in context offers a flexible, CEFR-aligned way to diagnose ability without depending only on fixed text types.</p>
           </div>
         </div>
       </div>
@@ -2043,11 +2044,11 @@ export default function WritingTestPage() {
       {/* Task structure */}
       <div className="landing-tasks animate-fade-up" style={{ animationDelay: "350ms" }}>
         <div className="landing-tasks-label">Test structure</div>
-        <div className="landing-tasks-title">Five interaction-based tasks</div>
-        <div className="landing-tasks-intro">To operationalise this approach, the assessment uses a set of tasks designed to elicit evidence across communicative functions.</div>
+        <div className="landing-tasks-title">Five tasks, one session</div>
+        <div className="landing-tasks-intro">The assessment strings several tasks together so we can see how candidates respond across different kinds of demand.</div>
         <div className="landing-task-grid">
           {[
-            { num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat", desc: "Real-time text interaction with an AI examiner. Adapts dynamically to probe ability and test interactional and informing functions." },
+            { num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat", desc: "Real-time text chat with an AI examiner. It adapts as you go, to probe ability and to test interactional and informing skills." },
             { num: "T2", cls: "t2", fn: "Inform & Narrate", name: "Extended Writing", desc: "A short scaffold followed by extended response. Tests clarity, sequencing, and the ability to provide detail across levels." },
             { num: "T3", cls: "t3", fn: "Express & Argue", name: "Opinion Chat", desc: "An interactive written discussion where the AI challenges, disagrees, and pushes for justification." },
             { num: "T4", cls: "t4", fn: "Rephrase & Adjust", name: "Pragmatic Control", desc: "Rewrite a text for a different audience or purpose. Tests paraphrasing, register control, and flexibility." },
@@ -2066,7 +2067,7 @@ export default function WritingTestPage() {
       {/* Final CTA */}
       <div className="landing-final-cta animate-fade-up" style={{ animationDelay: "400ms" }}>
         <h2 className="landing-final-cta-title">A more direct reflection<br/>of <em>writing ability</em></h2>
-        <p className="landing-final-cta-sub">This function-based writing assessment measures communicative function first, then analyses language form separately — creating a clearer view of what learners can do, and how they do it.</p>
+        <p className="landing-final-cta-sub">This function-based writing assessment measures what you can do with language first. It then looks at form on its own. That gives a clearer view of what learners can do and how they do it.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>

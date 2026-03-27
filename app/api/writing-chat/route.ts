@@ -14,18 +14,6 @@ type Message = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STAGE DEFINITIONS
-//
-// Six stages map directly to CEFR evidence layers:
-//   0 IDENTITY        → Pre-A1 / A1   (W-INT-1, W-INF-1, W-INT-2)
-//   1 DESCRIPTION     → A1 / A2       (W-INF-2, W-INT-3)
-//   2 EXPERIENCE      → A2+           (W-INF-3, W-INT-4)
-//   3 OPINION_REASON  → B1            (W-INF-4, W-INT-5)
-//   4 THREAD_FOLLOWUP → B1+           (W-INT-6)
-//   5 MISINTERPRET    → B2+           (W-INT-7)
-//
-// Stage progression is computed entirely in the route — the model does not
-// control or signal stage changes. The route returns nextStage to the frontend
-// which stores it and sends it back each turn.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STAGES = {
@@ -41,13 +29,79 @@ type Stage = typeof STAGES[keyof typeof STAGES];
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STAGE ADVANCEMENT LOGIC (route-controlled)
+// RESPONSE ANALYSIS
 //
-// Identity spans exchanges 0–2 (3 turns: name, location, job).
-// All other stages advance after 1 candidate response.
+// Analyses the candidate's last message for length and communicative substance.
+// Used to gate stage advancement and trigger probe enforcement.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeNextStage(currentStage: Stage, exchangeCount: number): Stage {
+function analyseResponse(text: string) {
+  const length = text.trim().split(/\s+/).length;
+  const hasReason = /(because|so|since|as|that's why|therefore|which is why)/i.test(text);
+  const hasDetail = length > 10;
+  const hasClause = /(and|but|although|however|when|if|while|though)/i.test(text);
+
+  return {
+    length,
+    hasReason,
+    hasDetail,
+    hasClause,
+    isVeryShort: length < 5,
+    isWeak: length < 6 || (!hasReason && length < 12),
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION TAGGING
+//
+// Returns the communicative function being targeted at each stage.
+// Used for debug logging and potential function coverage tracking.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getTargetFunction(stage: Stage): string {
+  switch (stage) {
+    case STAGES.IDENTITY:
+    case STAGES.DESCRIPTION:
+    case STAGES.EXPERIENCE:
+      return "informing";
+    case STAGES.OPINION_REASON:
+      return "informing + reasoning";
+    case STAGES.THREAD_FOLLOWUP:
+    case STAGES.MISINTERPRET:
+      return "interaction";
+    default:
+      return "unknown";
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAGE ADVANCEMENT LOGIC (route-controlled, performance-gated)
+//
+// Stage does NOT advance automatically.
+// A weak response holds the stage. Two consecutive weak responses
+// jump to MISINTERPRET (ceiling probe).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function computeNextStage(
+  currentStage: Stage,
+  exchangeCount: number,
+  analysis: ReturnType<typeof analyseResponse>,
+  struggleCount: number
+): Stage {
+
+  // Stay in stage if weak but not yet at ceiling threshold
+  if (analysis.isWeak && struggleCount < 2) {
+    return currentStage;
+  }
+
+  // Two consecutive weak responses → jump to ceiling probe
+  if (struggleCount >= 2) {
+    return STAGES.MISINTERPRET;
+  }
+
+  // Normal progression
   if (currentStage === STAGES.IDENTITY) {
     return exchangeCount >= 2 ? STAGES.DESCRIPTION : STAGES.IDENTITY;
   }
@@ -55,7 +109,8 @@ function computeNextStage(currentStage: Stage, exchangeCount: number): Stage {
   if (currentStage === STAGES.EXPERIENCE)      return STAGES.OPINION_REASON;
   if (currentStage === STAGES.OPINION_REASON)  return STAGES.THREAD_FOLLOWUP;
   if (currentStage === STAGES.THREAD_FOLLOWUP) return STAGES.MISINTERPRET;
-  return STAGES.MISINTERPRET; // ceiling — stays here
+
+  return STAGES.MISINTERPRET;
 }
 
 
@@ -70,58 +125,41 @@ function pickRandomTopic(): Topic {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUILD LEVEL BLOCK (diagnosis prompt reference only)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function buildLevelBlock(): string {
-  return WRITING_TASK1.levelClusters
-    .map((cluster) => {
-      const macros = cluster.macroIds
-        .map((id) => {
-          const m = WRITING_TASK1.azeMacro.find((macro) => macro.azeId === id);
-          if (!m) return "";
-          const guidanceList = m.probeGuidance
-            .map((g) => `      • ${g}`)
-            .join("\n");
-          return (
-            `    ${m.azeId} [${m.fn}]: ${m.claim}\n` +
-            `      Probe guidance:\n` +
-            `${guidanceList}` +
-            (m.notes ? `\n      Note: ${m.notes}` : "")
-          );
-        })
-        .filter(Boolean)
-        .join("\n\n");
-
-      return (
-        `── ${cluster.label} (GSE ${cluster.gseRange[0]}–${cluster.gseRange[1]}) ──` +
-        ` Confirm: ${cluster.confirmThreshold}/${cluster.totalMacros} macros CAN\n` +
-        `${cluster.levelDescription}\n\n${macros}`
-      );
-    })
-    .join("\n\n");
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
 // STAGE INSTRUCTION BUILDER
 //
-// Returns the specific instruction appended to the conversation prompt.
-// The model generates a message for this stage — it does not control
-// when the stage changes. Stage advancement is handled by computeNextStage().
+// Every stage now includes an ADAPTIVITY RULE block that instructs the model
+// to probe rather than advance when a weak response is detected.
+// The opinion stage enforces a mandatory "why" follow-up.
+// The misinterpret stage is tightly scoped to avoid absurd misreadings.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildStageInstruction(
   stage: Stage,
   exchangeCount: number,
   topic: Topic,
-  messages: Message[]
+  messages: Message[],
+  analysis: ReturnType<typeof analyseResponse>,
+  struggleCount: number
 ): string {
+
   const lastCandidateMsg = [...messages]
     .reverse()
     .find((m) => m.role === "user")?.content ?? "";
 
+  // Shared adaptivity rule prepended to all stages
+  const adaptivityRule =
+    "\nADAPTIVITY RULE:\n" +
+    "If the candidate's last response was short or weak (under ~10 words, no reasoning, no detail):\n" +
+    "- Do NOT move to a new topic or a harder question.\n" +
+    "- Ask them to expand, explain, or clarify what they just said.\n" +
+    "- Use natural follow-up language:\n" +
+    "  'Can you tell me a bit more about that?'\n" +
+    "  'Why do you think that?'\n" +
+    "  'Can you explain that in more detail?'\n" +
+    "- Only move forward when the candidate has given a substantive response.\n";
+
   switch (stage) {
+
     case STAGES.IDENTITY:
       if (exchangeCount === 0) {
         return (
@@ -148,51 +186,81 @@ function buildStageInstruction(
     case STAGES.DESCRIPTION:
       return (
         "\n\nSTAGE: DESCRIPTION — Exchange " + exchangeCount + ".\n" +
+        adaptivityRule +
         "Ask the candidate to describe something familiar connected to what they told you — their job, city, or daily life.\n" +
         "Do NOT introduce the session topic yet.\n" +
         "The question must require an entity + at least one attribute or detail.\n" +
         "Examples: 'Tell me something you like about your city.' / 'Describe a place you enjoy going to.'\n" +
         "Avoid yes/no questions.\n" +
+        (analysis.isWeak && struggleCount < 2
+          ? "The candidate's last response was weak. Ask them to expand on what they said — do not change topic.\n"
+          : "") +
         "Add <ceiling>false</ceiling>."
       );
 
     case STAGES.EXPERIENCE:
       return (
         "\n\nSTAGE: EXPERIENCE — Exchange " + exchangeCount + ".\n" +
+        adaptivityRule +
         "Now introduce the session topic: " + topic.label + ".\n" +
         "Ask about a past event OR a future plan connected to this topic.\n" +
         "The question must require past or future tense — not just present description.\n" +
         "Examples: 'Tell me about a time you...' / 'What did you do last...?' / 'What would you like to do next...?'\n" +
+        (analysis.isWeak && struggleCount < 2
+          ? "The candidate's last response was weak. Ask them to give more detail about their experience — do not change topic.\n"
+          : "") +
         "Add <ceiling>false</ceiling>."
       );
 
     case STAGES.OPINION_REASON:
       return (
         "\n\nSTAGE: OPINION_REASON — Exchange " + exchangeCount + ".\n" +
+        adaptivityRule +
         "Ask a position question about " + topic.label + " that requires justification.\n" +
         "The question must demand an opinion AND a reason — not just a preference.\n" +
         "Examples: 'Do you think [X] is better than [Y]? Why?' / 'Is [X] important? Why or why not?'\n" +
-        "Avoid knowledge questions. Keep it experience-based.\n" +
+        "Avoid knowledge questions. Keep it experience-based.\n\n" +
+        "MANDATORY FOLLOW-UP RULE:\n" +
+        "If the candidate gave an opinion in their last message WITHOUT a reason or explanation:\n" +
+        "→ You MUST ask a 'why' or 'what makes you say that' follow-up before moving on.\n" +
+        "→ Do NOT accept a one-sentence opinion as sufficient evidence.\n" +
+        "→ Example: 'That's interesting — why do you think that?' or 'What makes you feel that way?'\n" +
+        (analysis.isWeak && struggleCount < 2
+          ? "The candidate's last response was weak. Ask them to explain their reasoning — do not change topic.\n"
+          : "") +
         "Add <ceiling>false</ceiling>."
       );
 
     case STAGES.THREAD_FOLLOWUP:
       return (
         "\n\nSTAGE: THREAD_FOLLOWUP — Exchange " + exchangeCount + ".\n" +
+        adaptivityRule +
         "Reference something specific the candidate said earlier in the conversation.\n" +
         "Connect it to a new question about " + topic.label + ".\n" +
         "You MUST name what they said — do not make a generic question.\n" +
         "Examples: 'Earlier you said [X]. Why do you think that is?' / 'You mentioned [X] — does that affect how you feel about [Y]?'\n" +
         `The candidate's last message: "${lastCandidateMsg.slice(0, 120)}"\n` +
+        (analysis.isWeak && struggleCount < 2
+          ? "The candidate's last response was weak. Ask them to elaborate on what they mentioned — do not introduce a new thread.\n"
+          : "") +
         "Add <ceiling>false</ceiling>."
       );
 
     case STAGES.MISINTERPRET:
       return (
-        "\n\nSTAGE: MISINTERPRET — Exchange " + exchangeCount + " (runs once — this is the final probe).\n" +
-        "Deliberately misinterpret or oversimplify something the candidate said.\n" +
-        "The misinterpretation must be mild — not absurd or confusing.\n" +
-        "Bad: 'So you hate X completely?' — Good: 'So you think X is always better than Y?'\n" +
+        "\n\nSTAGE: MISINTERPRET — Exchange " + exchangeCount + " (final probe).\n" +
+        "Take something the candidate said and rephrase it slightly incorrectly or oversimplify it.\n" +
+        "Then ask them to confirm or correct your understanding.\n\n" +
+        "RULES FOR MISINTERPRETATION:\n" +
+        "- The misinterpretation must be PLAUSIBLE — not absurd or confusing.\n" +
+        "- Do NOT invent new information. Stay close to their actual words.\n" +
+        "- Do NOT exaggerate. A mild twist is enough.\n" +
+        "- Good: 'So you think simple food is always better than complex food?'\n" +
+        "- Bad: 'So you hate all restaurants?'\n\n" +
+        "This should create an opportunity for the candidate to:\n" +
+        "- Clarify what they actually meant\n" +
+        "- Correct the misreading\n" +
+        "- Add nuance to their earlier statement\n\n" +
         `The candidate's last message: "${lastCandidateMsg.slice(0, 120)}"\n` +
         "Add <ceiling>true</ceiling>."
       );
@@ -211,7 +279,7 @@ function buildStageInstruction(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildConversationPrompt(topic: Topic): string {
-  return `You are an AI examiner for the AZE Writing Test — Task 1: ${WRITING_TASK1.meta.title}.
+  return `You are an AI examiner for the FEAT Writing Test — Task 1: ${WRITING_TASK1.meta.title}.
 
 THIS IS A WRITTEN TEST. The candidate is TYPING responses in a WhatsApp-style chat. There is NO audio.
 
@@ -258,7 +326,7 @@ NOT grammar accuracy. NOT vocabulary range.
 
 A STRUGGLE = candidate fails to provide enough written evidence of the targeted function.
 Short but successful answers do NOT count as struggle.
-If the candidate struggles on TWO consecutive exchanges at the same stage, add <ceiling>true</ceiling>.
+The route tracks struggle — you do not need to count. Follow the stage instruction.
 
 ═══ DONE SIGNAL ═══
 
@@ -293,7 +361,7 @@ function buildDiagnosisPrompt(): string {
 
   return `You are a CEFR assessment specialist. You have observed a Writing Task 1 text chat conversation (Diagnostic Chat).
 
-Your task: Analyse the transcript and determine whether each communicative function was CONFIRMED, NOT DEMONSTRATED, or NOT TESTED.
+Your task: Analyse the transcript and determine whether each communicative function was CONFIRMED, NOT_DEMONSTRATED, or NOT_TESTED.
 
 ═══ CONTEXT ═══
 
@@ -317,14 +385,13 @@ ${diagnosisMacroBlock}
 1. CONFIRMED = clear, unambiguous evidence the candidate achieved this communicative function in writing.
 2. NOT_DEMONSTRATED = insufficient evidence that the candidate achieved this communicative function during the task.
 3. NOT_TESTED = the conversation never created conditions to test this function. Use sparingly — if the stage ran and the candidate did not demonstrate the function, score NOT_DEMONSTRATED.
-4. Be conservative: mixed or ambiguous evidence = NOT_YET.
-5. A single clear instance under appropriate demand IS sufficient for CAN.
-6. Multiple weak instances do NOT combine into CAN.
+4. Be conservative: mixed or ambiguous evidence = NOT_DEMONSTRATED.
+5. A single clear instance under appropriate demand IS sufficient for CONFIRMED.
+6. Multiple weak instances do NOT combine into CONFIRMED.
 7. One response can evidence multiple macros across levels.
-8. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied by the performance.
+8. Clear higher-level competence may support lower-level CONFIRMED judgements when those lower functions are logically implied by the performance.
 
 IMPORTANT: Score EVERY macro. Do not skip any.
-
 
 ═══ CONFIDENCE LEVEL ═══
 
@@ -333,8 +400,6 @@ For each macro judgement assign a confidence level:
 HIGH — clear, direct evidence of the function under appropriate communicative demand.
 MEDIUM — some evidence is present but limited in length, complexity, or clarity.
 LOW — evidence is weak, indirect, or borderline.
-
-Confidence reflects the strength of the evidence, not the CEFR level.
 
 ═══ OUTPUT FORMAT ═══
 
@@ -430,10 +495,14 @@ export async function POST(req: NextRequest) {
       action,
       topic: topicFromClient,
       stage: stageFromClient,
+      struggleCount: struggleFromClient,
     } = await req.json();
 
     const topic: Topic = topicFromClient ?? pickRandomTopic();
     const currentStage: Stage = (stageFromClient ?? STAGES.IDENTITY) as Stage;
+
+    // Struggle count is tracked by the frontend and sent each turn
+    const currentStruggleCount: number = struggleFromClient ?? 0;
 
 
     // ── Diagnosis ──────────────────────────────────────────────────────────
@@ -527,6 +596,30 @@ export async function POST(req: NextRequest) {
 
 
     // ── Normal conversation turn ───────────────────────────────────────────
+
+    // Analyse the last candidate response
+    const lastUserMsg = [...messages]
+      .reverse()
+      .find((m: Message) => m.role === "user")?.content ?? "";
+
+    const analysis = analyseResponse(lastUserMsg);
+
+    // Update struggle count based on analysis
+    // (frontend sends current count; route returns updated count)
+    const updatedStruggleCount = exchangeCount === 0
+      ? 0  // reset on first turn
+      : analysis.isWeak
+        ? currentStruggleCount + 1
+        : 0; // reset on strong response
+
+    // Route-controlled ceiling — don't rely on model
+    const routeCeilingReached =
+      updatedStruggleCount >= 2 || currentStage === STAGES.MISINTERPRET;
+
+    // Target function for this stage (for logging/tracking)
+    const targetFunction = getTargetFunction(currentStage);
+
+    // Build prompt
     const conversationPrompt = buildConversationPrompt(topic);
 
     let stageInstruction: string;
@@ -536,7 +629,14 @@ export async function POST(req: NextRequest) {
         "\n\nFINAL EXCHANGE. Thank the candidate briefly in 1 sentence. " +
         "Add <ceiling>true</ceiling>.";
     } else {
-      stageInstruction = buildStageInstruction(currentStage, exchangeCount, topic, messages);
+      stageInstruction = buildStageInstruction(
+        currentStage,
+        exchangeCount,
+        topic,
+        messages,
+        analysis,
+        updatedStruggleCount
+      );
     }
 
     const prompt = conversationPrompt + stageInstruction;
@@ -552,12 +652,17 @@ export async function POST(req: NextRequest) {
 
     const rawMessage = response.choices[0].message.content || "";
 
-    // Ceiling signal from model
-    const ceilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
-    const ceilingReached = ceilingMatch ? ceilingMatch[1] === "true" : false;
+    // Model ceiling signal (for stages where model signals ceiling naturally)
+    const modelCeilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
+    const modelCeilingReached = modelCeilingMatch ? modelCeilingMatch[1] === "true" : false;
 
-    // Next stage computed entirely in route — model does not control this
-    const nextStage: Stage = computeNextStage(currentStage, exchangeCount);
+    // Final ceiling: route-controlled OR model-signalled
+    const ceilingReached = routeCeilingReached || modelCeilingReached;
+
+    // Next stage computed entirely in route
+    const nextStage: Stage = wrapUp
+      ? currentStage
+      : computeNextStage(currentStage, exchangeCount, analysis, updatedStruggleCount);
 
     // Clean message
     const aiMessage = rawMessage
@@ -568,6 +673,8 @@ export async function POST(req: NextRequest) {
       message: aiMessage,
       ceilingReached,
       stage: nextStage,
+      struggleCount: updatedStruggleCount,
+      targetFunction,
       topic,
     });
 
