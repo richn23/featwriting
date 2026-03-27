@@ -231,6 +231,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .landing-section-body { font-size:.975rem; line-height:1.8; color:var(--s-text-muted) }
 .landing-section-body p + p { margin-top:16px }
 .landing-section-body strong { color:var(--s-text); font-weight:600 }
+.landing-section-pull { font-size:1.05rem; font-weight:600; line-height:1.55; color:var(--s-text); margin-top:16px }
 
 /* Contrast quote block */
 .landing-contrast {
@@ -1945,7 +1946,7 @@ export default function WritingTestPage() {
         <div className="landing-hero-eyebrow">FEAT Writing Test</div>
         <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
         <p className="landing-hero-anchor">FEAT is a function-based writing assessment.</p>
-        <p className="landing-hero-sub">A function-based approach that measures what candidates can do with language. It is not just whether they can follow the conventions of a particular text type.</p>
+        <p className="landing-hero-sub">It measures what candidates can do with language, not just whether they can follow the conventions of a particular text type.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -1956,7 +1957,9 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "100ms" }}>
         <div className="landing-section-label">The problem</div>
         <div className="landing-section-body">
-          <p>Writing has changed. Most people write more today than any previous generation. They do it through messages, captions, comments, and replies, not pen and paper. Writing is how we manage relationships, navigate work, and take part in the world.</p>
+          <p>Writing has changed. Most people write more today than any previous generation. They do it through messages, captions, comments, and replies — not pen and paper.</p>
+          <p>Sometimes thoughtfully. Sometimes as keyboard warriors.</p>
+          <p>Writing is how we manage relationships, navigate work, and take part in the world.</p>
           <p>But writing assessment has changed more slowly.</p>
           <p>Most tests still ask candidates to produce a genre: an essay, a report, a formal letter. The question becomes: can you produce the right kind of text? Format. Structure. Register. Product.</p>
           <p>This is genre-based testing. It captures important skills, but only part of what it means to communicate in writing.</p>
@@ -1969,7 +1972,9 @@ export default function WritingTestPage() {
         <div className="landing-section-body">
           <p>CEFR takes a different approach. Its descriptors are function-based: can the learner inform, express, argue, interact?</p>
           <p>But many assessments aligned to CEFR are still built around genre tasks, like a timed essay, a formal complaint, or a report on a graph.</p>
-          <p>What the test claims to measure and what it actually tests don&apos;t always match. A function-based writing assessment can narrow that gap.</p>
+          <p>What the test claims to measure and what it actually tests don&apos;t always match.</p>
+          <p className="landing-section-pull">We test the format. We don&apos;t always test the communication.</p>
+          <p>A function-based writing assessment can narrow that gap.</p>
         </div>
       </section>
 
@@ -1977,12 +1982,12 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
         <div className="landing-section-label">A different approach</div>
         <div className="landing-section-body">
-          <p>FEAT starts from how CEFR describes communicative purpose. It tests those ideas in live back-and-forth tasks, not only through a single static prompt.</p>
+          <p>FEAT starts from what learners are trying to do with language. It tests those ideas in live back-and-forth tasks, not only through a single static prompt.</p>
           <div className="landing-contrast">
             <p className="not">Instead of asking someone to write an essay about technology,</p>
             <p className="but">ask them to explain an idea to someone who does not understand it.</p>
           </div>
-          <p>They may need to justify a view when challenged, or clarify when something lands wrong.</p>
+          <p>They may need to justify a view when challenged, or clarify when something is not understood.</p>
           <p>The AI does more than prompt. It responds, asks follow-ups, challenges you, and sometimes misunderstands on purpose.</p>
           <p>That makes strengths and limits in writing easier to see.</p>
           <p>Level comes from patterns of evidence across the session. You get a structured diagnosis, not one isolated task score.</p>
