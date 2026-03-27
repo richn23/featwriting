@@ -63,7 +63,13 @@ function buildConversationPrompt(
 
 YOUR ROLE: You are a debate partner. Your job is to get the candidate to express opinions and argue/justify them in writing. You challenge, push for reasons, introduce counter-perspectives, and ask them to defend their position.
 
-This is NOT a friendly chat. This is a structured debate. Warm but persistent.
+This is a natural conversation where you challenge the candidate's ideas.
+Be warm, but do not simply agree — push them to explain and justify their opinions.
+
+═══ TOPIC CONTROL ═══
+
+Stay on the current topic at all times.
+Do not introduce unrelated topics.
 
 ═══ CANDIDATE CONTEXT ═══
 
@@ -78,16 +84,20 @@ ${switchTopic
 1. ONE question or challenge per turn. Never ask two things.
 2. Maximum 2 sentences per turn.
 3. Be warm but persistent — like a good teacher who pushes.
-4. When they give an opinion, challenge it using one of the challenge types below.
-5. If they defend well, push harder with a deeper challenge.
-6. If they struggle, simplify your challenge or rephrase.
-7. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
-8. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
-9. If the candidate struggles on TWO consecutive challenges at the same functional level, you have found their ceiling. Stop pushing up.
+4. Do not escalate difficulty too quickly. Increase challenge gradually based on the candidate's responses.
+5. When possible, refer to what the candidate just said when forming your challenge (e.g. tie counter-views to their wording — "You said it's better — but what about people who think the opposite?" rather than a generic "But some people would say...").
+6. Avoid repeating the same idea or argument. Each challenge should move the discussion forward.
+7. When they give an opinion, challenge it using one of the challenge types below.
+8. If they defend well, increase the challenge slightly by asking for deeper reasoning, examples, or alternative perspectives.
+9. If they struggle, simplify your challenge or rephrase.
+10. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
+11. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
+12. If the candidate struggles repeatedly, reduce the complexity of your questions rather than stopping the conversation.
 
 ═══ CHALLENGE TYPES — USE VARIETY ═══
 
 Do not repeat the same challenge type. Rotate through these:
+• Ask for clarification — "What do you mean?" / "Can you explain that more clearly?"
 • Ask for a reason — "Why do you think that?"
 • Ask for an example — "Can you give an example?"
 • Introduce a counter-view — "But some people would say..."
@@ -111,9 +121,17 @@ Switch topic only when the candidate has:
 • maintained their position across more than one turn
 
 ${switchTopic
-  ? `The topic has ALREADY been switched to: ${switchTopic.label}. Continue probing on this topic.`
-  : `When all four conditions above are met: say "OK, let me ask you about something different." Then introduce the switch topic. Signal readiness with <switch_ready>true</switch_ready>.`
+  ? `The topic has ALREADY been switched to: ${switchTopic.label}. Continue probing on this topic only.`
+  : `When all four conditions above are met: say "OK, let's look at something different." Then introduce the new topic clearly and explicitly. Signal readiness with <switch_ready>true</switch_ready>.`
 }
+
+═══ FIRST TURN (opening message only — exchange 0) ═══
+
+Apply only when generating the very first assistant message in the conversation.
+Structure it as:
+"Let's talk about this: ${chosenTopic.label}."
+"${chosenTopic.prompt} What do you think?"
+Keep both parts. Maximum 2 sentences in total (the second line may combine the topic question with the opinion prompt).
 
 ═══ LEVEL GUIDE ═══
 
@@ -122,7 +140,7 @@ ${levelBlock}
 ═══ DONE SIGNAL ═══
 
 At the end of EVERY response, add:
-<ceiling>true</ceiling> — you believe you've found the candidate's ceiling
+<ceiling>true</ceiling> — you believe you've gathered sufficient evidence of the candidate's ability to express and argue for this phase (not merely because they struggled once — simplify questions first if they struggle repeatedly)
 <ceiling>false</ceiling> — you want to keep probing
 
 If you think the candidate is ready for a topic switch (conditions met, not yet switched), add:
@@ -171,8 +189,8 @@ Clear higher-level competence may support lower-level CAN judgements when those 
 
 ═══ NOT_TESTED RULE ═══
 
-NOT_TESTED should only be used when the conversation clearly had no opportunity to demonstrate the function.
-If the conversation created the opportunity but the candidate did not demonstrate the function, score NOT_YET — not NOT_TESTED.
+Use NOT_TESTED only when no opportunity existed for that function to be demonstrated.
+If any opportunity existed — even briefly — and the candidate did not demonstrate the function, score NOT_YET, not NOT_TESTED.
 
 ═══ MACROS TO ASSESS ═══
 
@@ -182,7 +200,7 @@ ${diagnosisMacroBlock}
 
 1. CAN = clear evidence in the writing that the candidate achieved this function.
 2. NOT_YET = the writing attempted this function but did not achieve it clearly, or no evidence exists.
-3. NOT_TESTED = use only when no opportunity to demonstrate the function existed (use sparingly).
+3. NOT_TESTED = use only when no opportunity to demonstrate the function existed. Otherwise NOT_YET.
 4. Be conservative: mixed evidence = NOT_YET.
 5. A single clear instance under appropriate communicative demand may be sufficient for CAN. Treat minimal evidence cautiously.
 6. Multiple weak instances do NOT combine into CAN.
@@ -257,16 +275,27 @@ export async function POST(req: NextRequest) {
       messages,
       exchangeCount,
       wrapUp,
-      chosenTopicId,
-      switchTopicId,
+      chosenTopicId: chosenTopicIdRaw,
+      switchTopicId: switchTopicIdRaw,
       task1Level,
       task2Level,
     } = body;
+    const chosenTopicId = chosenTopicIdRaw ?? body.chosenTopic;
+    const switchTopicId = switchTopicIdRaw ?? body.switchTopic;
 
     // ── Get topic choices ──────────────────────────────────────────────
     if (action === "get-topics") {
+      const prevLevel = task2Level || task1Level || "unknown";
+      let initialTier: TopicOption["tier"];
+
+      if (prevLevel.includes("B2") || prevLevel.includes("C1")) {
+        initialTier = "broader";
+      } else {
+        initialTier = "familiar";
+      }
+
       const choices = pickRandomTopics(
-        "familiar",
+        initialTier,
         WRITING_TASK3.principles.familiarTopicsShownToCandidate
       );
       return NextResponse.json({ choices });
@@ -275,6 +304,7 @@ export async function POST(req: NextRequest) {
 
     // ── Conversation turn ──────────────────────────────────────────────
     if (action === "chat") {
+      const MIN_EXCHANGES_BEFORE_WRAP = 4;
       const prevLevel = task2Level || task1Level || "unknown";
 
       const chosenTopic =
@@ -290,8 +320,10 @@ export async function POST(req: NextRequest) {
 
       if (exchangeCount === 0) {
         prompt +=
-          `\n\nThis is the START. Introduce the topic warmly and ask their opinion: ` +
-          `"${chosenTopic.prompt}" — keep it short and chat-like. Keep the first question concrete and easy to answer.`;
+          "\n\nThis is exchange 0 — you are sending the FIRST message only. Follow the FIRST TURN format in the system prompt above.";
+      } else if (wrapUp && exchangeCount < MIN_EXCHANGES_BEFORE_WRAP) {
+        prompt +=
+          "\n\nNot enough exchanges have occurred for a final wrap-up. Continue with one short, simpler challenge (do not thank or close the task). Add <ceiling>false</ceiling>.";
       } else if (wrapUp) {
         prompt +=
           "\n\nThis is the final exchange. Thank the candidate briefly in 1 sentence. " +
@@ -314,7 +346,11 @@ export async function POST(req: NextRequest) {
       const rawMessage = response.choices[0].message.content || "";
 
       const ceilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
-      const ceilingReached = ceilingMatch ? ceilingMatch[1] === "true" : false;
+      const ceilingReachedRaw = ceilingMatch ? ceilingMatch[1] === "true" : false;
+      const ceilingReached =
+        ceilingReachedRaw &&
+        exchangeCount >= MIN_EXCHANGES_BEFORE_WRAP &&
+        !(wrapUp && exchangeCount < MIN_EXCHANGES_BEFORE_WRAP);
 
       const switchReadyMatch = rawMessage.match(/<switch_ready>true<\/switch_ready>/);
       const switchReady = !!switchReadyMatch;
@@ -326,7 +362,12 @@ export async function POST(req: NextRequest) {
 
       let nextSwitchTopic: TopicOption | null = null;
       if (switchReady && !switchTopicId) {
-        const switchTier = switchTopic?.tier === "broader" ? "abstract" : "broader";
+        let switchTier: TopicOption["tier"];
+        if (prevLevel.includes("B2") || prevLevel.includes("C1")) {
+          switchTier = "abstract";
+        } else {
+          switchTier = "broader";
+        }
         nextSwitchTopic = pickSwitchTopic(switchTier, chosenTopicId);
       }
 

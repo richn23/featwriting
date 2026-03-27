@@ -12,6 +12,25 @@ type Message = {
   content: string;
 };
 
+/** Minimum candidate turns before <ceiling>true</ceiling> may end the task (route-controlled). */
+const MIN_T5_EXCHANGES_BEFORE_WRAP = 6;
+
+/** Route-controlled stage from exchangeCount (user messages completed before this AI reply). */
+function getT5Stage(exchangeCount: number): 1 | 2 | 3 | 4 | 5 {
+  if (exchangeCount <= 1) return 1;
+  if (exchangeCount <= 3) return 2;
+  if (exchangeCount <= 5) return 3;
+  if (exchangeCount <= 7) return 4;
+  return 5;
+}
+
+const T5_STAGE_LABEL: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: "Stage 1 — COMPARE",
+  2: "Stage 2 — RECOMMEND",
+  3: "Stage 3 — JUSTIFY",
+  4: "Stage 4 — TRADE-OFFS",
+  5: "Stage 5 — ADAPTATION",
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STIMULUS SELECTION
@@ -66,7 +85,7 @@ const diagnosisMacroBlock = WRITING_TASK5.levelClusters
 // CONVERSATION PROMPT BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildConversationPrompt(stimSet: StimulusSet | null): string {
+function buildConversationPrompt(stimSet: StimulusSet | null, stage: 1 | 2 | 3 | 4 | 5): string {
   const cardDesc = (card: StimulusSet["cardA"]) =>
     `${card.name} (${card.rating}★, ${card.price} ${card.priceNote ?? ""}): ` +
     card.features.map(f => `${f.label}: ${f.value}`).join(" | ");
@@ -75,41 +94,58 @@ function buildConversationPrompt(stimSet: StimulusSet | null): string {
     ? `═══ THE CANDIDATE CAN SEE THESE TWO CARDS ═══\n\n` +
       `Option A: ${cardDesc(stimSet.cardA)}\n` +
       `Option B: ${cardDesc(stimSet.cardB)}\n\n` +
-      `Suggested situations (use as inspiration — vary wording each time):\n` +
+      `Suggested situations (draw phrasing from these — stay on-topic):\n` +
       stimSet.situations.map((s, i) => `${i + 1}. ${s}`).join("\n")
     : "No card data available.";
 
+  const stageDirectives: Record<1 | 2 | 3 | 4 | 5, string> = {
+    1:
+      "Focus ONLY on comparison. Ask for key differences between the two options (features, price, fit for needs visible on the cards). Do NOT ask which option they recommend yet. Do NOT mix recommendation into this stage.",
+    2:
+      "Ask which option is better for a specific need (use or adapt a situation from the list). One clear question. They should recommend one option for that scenario.",
+    3:
+      "Push for reasons grounded in the cards. Ask why that option — insist they point to concrete details (price, time, location, features, ratings, etc.). If their answer is too generic, ask which specific detail from Option A or B supports their view.",
+    4:
+      "Introduce a complication so neither option is perfect: e.g. tighter budget, less time, a conflicting preference, or a new constraint. Ask them to choose anyway and explain the trade-off. Make the tension explicit.",
+    5:
+      "Change the situation clearly (e.g. \"Now imagine the person has a different need…\" or a new priority). Ask for a NEW recommendation and a short explanation of how and why their advice changed compared to before.",
+  };
+
   return `You are an AI examiner for the AZE Writing Test — Task 5: Compare & Advise.
 
-YOUR ROLE: The candidate can see two option cards on their screen. You ask situational questions that require them to mediate — relay information from the cards to match specific needs.
+YOUR ROLE: The candidate sees two option cards. You elicit written mediation — relaying information from the cards to match needs. This tests pragmatic control of advice, not general knowledge.
 
 ${cardBlock}
 
+═══ CURRENT STAGE (STRICT — FOLLOW THIS; DO NOT SKIP AHEAD) ═══
+
+You are currently in: ${T5_STAGE_LABEL[stage]} (${stage}/5)
+
+${stageDirectives[stage]}
+
+Progression is controlled by the system. Even if the candidate answers well, stay within this stage’s goal until the next turn advances the stage.
+
+═══ SOURCE-BASED MEDIATION (CRITICAL) ═══
+
+The candidate must base answers on the information shown in the options. If a reply is too general or could apply without reading the cards, ask which detail from Option A or B supports their answer. Prompt them to name specific features (price, time, location, ratings, etc.).
+
+═══ TOPIC ANCHORING ═══
+
+Stay focused on the two options provided. Do not introduce unrelated topics or hypothetical products not on the cards. All questions must refer to information shown in the options or to situations that clearly map to those options.
+
 ═══ RULES ═══
 
-1. ONE question at a time. Never ask two things.
-2. Maximum 2 sentences per turn.
-3. Be warm and conversational — like a friend asking for advice.
-4. Start by asking them to describe the main differences between the two options.
-5. Then introduce situations: "My friend needs X. Which would you recommend?"
-6. After they answer, CHANGE the situation: "But what if they also need Y?"
-7. Push for reasons: "Why that one?" / "The other has X — doesn't that matter?"
-8. Reward scenario adaptation: if they adjust their recommendation when the situation changes, that is strong evidence of mediation ability — probe this actively.
-9. If they struggle on TWO consecutive questions, you have found their ceiling.
+1. ONE question (or one short prompt) at a time. Maximum 2 sentences per turn.
+2. Be warm and conversational.
+3. Do not decide stage yourself — use the CURRENT STAGE above only.
 
-═══ PROBING STRATEGY ═══
+═══ CEILING SIGNAL (ADVISORY ONLY) ═══
 
-- Exchange 1–2: "What are the main differences?" (basic comparison → W5-F1, W5-F2)
-- Exchange 3–4: "Which for [person with need A]?" (simple recommendation → W5-F3, W5-F4)
-- Exchange 5–6: "But what about [complication]?" (trade-off weighing → W5-F5, W5-F6)
-- Exchange 7–8: "Now imagine [different person]" (scenario switch → W5-F7)
-- Exchange 9+: "They also need [conflicting requirement]" (synthesis → W5-F8)
+At the end of EVERY response, add exactly one line:
+<ceiling>true</ceiling> — if you believe you have seen this candidate’s ceiling for mediation in this chat, OR
+<ceiling>false</ceiling> — to continue probing.
 
-═══ DONE SIGNAL ═══
-
-At the end of EVERY response, add:
-<ceiling>true</ceiling> — you believe you've found the candidate's ceiling
-<ceiling>false</ceiling> — you want to keep probing`;
+Note: The system may keep the conversation open until enough exchanges have occurred — your signal is not the only rule.`;
 }
 
 
@@ -158,6 +194,17 @@ ${diagnosisMacroBlock}
 
 IMPORTANT: Score EVERY macro. The system calculates the level from your scores.
 
+
+═══ CONFIDENCE LEVEL ═══
+
+For each macro judgement assign a confidence level:
+
+HIGH — clear, direct evidence of the function under appropriate communicative demand.
+MEDIUM — some evidence is present but limited in length, complexity, or clarity.
+LOW — evidence is weak, indirect, or borderline.
+
+Confidence reflects the strength of the evidence, not the CEFR level.
+
 ═══ OUTPUT FORMAT ═══
 
 Respond ONLY with valid JSON:
@@ -168,7 +215,8 @@ Respond ONLY with valid JSON:
       "claim": "Can identify and state basic facts from a visual source",
       "level": "A1",
       "fn": "Informing",
-      "result": "CAN|NOT_YET|NOT_TESTED",
+      "result": "CONFIRMED|NOT_DEMONSTRATED|NOT_TESTED",
+      "confidence": "HIGH|MEDIUM|LOW",
       "rationale": "Short explanation (1 sentence)",
       "evidence": "Direct quote from the candidate's message"
     }
@@ -191,7 +239,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, messages, exchangeCount, wrapUp, stimulusSetId, prevLevel } = body;
-
+    const exCount = typeof exchangeCount === "number" ? exchangeCount : 0;
 
     // ── Select stimulus set ────────────────────────────────────────────
     if (action === "get-stimulus") {
@@ -203,22 +251,44 @@ export async function POST(req: NextRequest) {
     // ── Conversation turn ──────────────────────────────────────────────
     if (action === "chat") {
       const stimSet = WRITING_TASK5.stimulusSets.find(s => s.id === stimulusSetId) ?? null;
-      const conversationPrompt = buildConversationPrompt(stimSet);
-      let prompt = conversationPrompt;
 
-      if (exchangeCount === 0) {
+      if (wrapUp) {
+        const prompt =
+          `You are closing the Task 5 (Compare & Advise) chat. ` +
+          (stimSet ? `The two options were "${stimSet.cardA.name}" and "${stimSet.cardB.name}". ` : "") +
+          `Thank the candidate briefly in one sentence. Add <ceiling>true</ceiling>.`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: prompt },
+            ...(messages || []),
+          ],
+          max_tokens: 150,
+        });
+
+        const rawMessage = response.choices[0].message.content || "";
+        const aiMessage = rawMessage
+          .replace(/<ceiling>(true|false)<\/ceiling>/g, "")
+          .trim();
+
+        return NextResponse.json({ message: aiMessage, ceilingReached: true, forceContinue: false });
+      }
+
+      const stage = getT5Stage(exCount);
+      let prompt = buildConversationPrompt(stimSet, stage);
+
+      if (exCount === 0) {
         prompt +=
-          `\n\nThis is the START. Greet warmly and ask: ` +
-          `"Take a look at these two options. What are the main differences you can see?"`;
-      } else if (wrapUp) {
-        prompt +=
-          "\n\nThis is the final exchange. Thank the candidate briefly in 1 sentence. " +
-          "Add <ceiling>true</ceiling>.";
+          `\n\nThis is the START (first assistant message). Open in two short sentences only:\n` +
+          `1) Say that here are two options (you may say "Here are two options.").\n` +
+          `2) Ask them to describe the main differences between them — e.g. "Can you tell me the main differences between them?"\n` +
+          `Do not ask for a recommendation yet. Add <ceiling>false</ceiling>.`;
       } else {
         prompt +=
-          `\n\nThis is exchange ${exchangeCount} of up to ${WRITING_TASK5.meta.maxExchanges}. ` +
-          `Ask the next situational question or probe their last answer. ` +
-          `If they gave a recommendation, change the situation to test whether they adapt.`;
+          `\n\nCandidate replies completed so far in this chat: ${exCount}. ` +
+          `You are in ${T5_STAGE_LABEL[stage]}. Follow ONLY that stage’s instructions. ` +
+          `One question, max 2 sentences.`;
       }
 
       const response = await openai.chat.completions.create({
@@ -232,17 +302,24 @@ export async function POST(req: NextRequest) {
 
       const rawMessage = response.choices[0].message.content || "";
       const ceilingMatch = rawMessage.match(/<ceiling>(true|false)<\/ceiling>/);
-      const ceilingReached = ceilingMatch ? ceilingMatch[1] === "true" : false;
+      const ceilingSignal = ceilingMatch ? ceilingMatch[1] === "true" : false;
+      const ceilingReached = ceilingSignal && exCount >= MIN_T5_EXCHANGES_BEFORE_WRAP;
+      const forceContinue = ceilingSignal && exCount < MIN_T5_EXCHANGES_BEFORE_WRAP;
       const aiMessage = rawMessage
         .replace(/<ceiling>(true|false)<\/ceiling>/g, "")
         .trim();
 
-      return NextResponse.json({ message: aiMessage, ceilingReached });
+      return NextResponse.json({ message: aiMessage, ceilingReached, forceContinue });
     }
 
 
     // ── Diagnosis ──────────────────────────────────────────────────────
     if (action === "diagnose") {
+      const diagStim =
+        typeof stimulusSetId === "string" && stimulusSetId
+          ? WRITING_TASK5.stimulusSets.find(s => s.id === stimulusSetId) ?? null
+          : null;
+
       const transcript = (messages || [])
         .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
         .join("\n");
@@ -252,12 +329,22 @@ export async function POST(req: NextRequest) {
         .map((m: Message) => m.content)
         .join("\n");
 
+      const cardsBlock = diagStim
+        ? `Here are the options (structured card data — use to verify facts and recommendations):\n\n` +
+          `Card A: ${JSON.stringify(diagStim.cardA)}\n\n` +
+          `Card B: ${JSON.stringify(diagStim.cardB)}\n\n`
+        : "";
+
+      const functionUserContent =
+        cardsBlock +
+        `Conversation transcript:\n\n${transcript}`;
+
       const [functionRes, formRes] = await Promise.all([
         openai.chat.completions.create({
           model: "gpt-4o",
           messages: [
             { role: "system", content: diagnosisPrompt },
-            { role: "user", content: `Here is the full transcript:\n\n${transcript}` },
+            { role: "user", content: functionUserContent },
           ],
           max_tokens: 4000,
           temperature: 0.1,
@@ -296,7 +383,7 @@ export async function POST(req: NextRequest) {
         for (const lc of WRITING_TASK5.levelClusters) {
           const canCount = lc.macroIds.filter((id) => {
             const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CAN";
+            return r && (r as { result: string }).result === "CONFIRMED";
           }).length;
           const confirmed = canCount >= lc.confirmThreshold;
           levelResults.push({
