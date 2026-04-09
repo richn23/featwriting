@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK2, Topic } from "../../writing/writing-task2-descriptors";
 import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -54,7 +55,10 @@ function buildPersonalisedPrompt(
     .filter(m => m.role === "user")
     .map(m => m.content);
 
-  const recentContent = userMessages.slice(-2).join(" ").trim();
+  // Guard: need at least 2 user messages with any content (1+ non-empty word)
+  const messagesWithContent = userMessages.filter(
+    msg => msg.trim().split(/\s+/).filter(Boolean).length >= 1
+  );
 
   // Word range by level
   const high = ["B2", "B2+", "C1"];
@@ -65,22 +69,26 @@ function buildPersonalisedPrompt(
     ? [100, 180]
     : [60, 120];
 
-  // Guard: require at least 6 words of real content
-  const hasContent = recentContent.split(/\s+/).filter(Boolean).length >= 6;
+  const hasContent = messagesWithContent.length >= 2;
 
   if (hasContent) {
+    // Build bullet points from each scaffold answer separately
+    const bulletPoints = messagesWithContent
+      .map(msg => `• ${msg.trim()}`)
+      .join("\n");
+
     return {
       promptTitle: `Write about your experience with ${topic.label.toLowerCase()}`,
       promptText:
-        `You mentioned:\n\n"${recentContent}"\n\n` +
-        `Write a message to tell someone about this experience.\n\n` +
+        `In the warm-up, you said:\n\n${bulletPoints}\n\n` +
+        `Now write a message to tell someone about this experience.\n\n` +
         `In your writing:\n` +
         `• Say what happened\n` +
         `• Explain when or where it took place\n` +
         `• Explain why it was important, enjoyable, or difficult\n\n` +
         `Write naturally — as if you are telling a friend.`,
       suggestedWords,
-      topicSummary: recentContent.slice(0, 120),
+      topicSummary: messagesWithContent.map(m => m.trim()).join("; ").slice(0, 120),
     };
   }
 
@@ -129,6 +137,8 @@ THIS IS THE SCAFFOLDING PHASE. It is NOT assessed. Your only job is to warm the 
 ${nameInstruction}
 Estimated level: ${task1Level || "unknown"}
 Topic: ${topic.label}
+
+SCAFFOLD SEED (use this to guide your questions — your questions must be specific to this seed, not generic):
 ${topic.scaffoldSeed}
 
 SCAFFOLD RULES:
@@ -381,74 +391,67 @@ export async function POST(req: NextRequest) {
           : writingPromptFromClient.promptText ?? "")
         : buildPersonalisedPrompt(topic, scaffoldMessages, task1Level || "A1").promptText;
 
-      const [functionRes, formRes] = await Promise.all([
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: buildDiagnosisPrompt() },
-            {
-              role: "user",
-              content:
-                `Topic: ${topic.label}\n\n` +
-                `Writing prompt given to candidate:\n${promptUsed}\n\n` +
-                (scaffoldContext
-                  ? `Scaffold context (candidate's warm-up responses — for reference only, not scored):\n${scaffoldContext}\n\n`
-                  : "") +
-                `Candidate's extended writing response (main scored evidence):\n\n${writingText}`,
-            },
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-        }),
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: languageAnalysisPrompt },
-            {
-              role: "user",
-              content: `Candidate's writing:\n\n${writingText}`,
-            },
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      ]);
+      // Guard: skip language analysis if candidate wrote almost nothing
+      const candidateWordCount = writingText.trim().split(/\s+/).filter(Boolean).length;
+      const hasEnoughText = candidateWordCount >= 10;
 
-      const funcRaw = functionRes.choices[0].message.content || "";
-      const funcCleaned = funcRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const judgeAPrompt = buildDiagnosisPrompt();
+      const judgeBPrompt = buildJudgeBPrompt(judgeAPrompt);
+      const diagnosisUserContent =
+        `Topic: ${topic.label}\n\n` +
+        `Writing prompt given to candidate:\n${promptUsed}\n\n` +
+        (scaffoldContext
+          ? `Scaffold context (candidate's warm-up responses — for reference only, not scored):\n${scaffoldContext}\n\n`
+          : "") +
+        `Candidate's extended writing response (main scored evidence):\n\n${writingText}`;
 
-      const formRaw = formRes.choices[0].message.content || "";
+      const judgeAPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: judgeAPrompt }, { role: "user", content: diagnosisUserContent }],
+        max_tokens: 4000, temperature: 0.1,
+      });
+      const judgeBPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: judgeBPrompt }, { role: "user", content: diagnosisUserContent }],
+        max_tokens: 4000, temperature: 0.1,
+      });
+
+      const formResPromise = hasEnoughText
+        ? openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: languageAnalysisPrompt },
+              { role: "user", content: `Candidate's writing:\n\n${writingText}` },
+            ],
+            max_tokens: 2000, temperature: 0.1,
+          })
+        : null;
+
+      const [judgeARes, judgeBRes, formRes] = await Promise.all([judgeAPromise, judgeBPromise, formResPromise]);
+
+      const judgeARaw = judgeARes.choices[0].message.content || "";
+      const judgeBRaw = judgeBRes.choices[0].message.content || "";
+      const judgeACleaned = judgeARaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const judgeBCleaned = judgeBRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+      const formRaw = formRes?.choices[0].message.content || "";
       const formCleaned = formRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
       try {
-        const diagnosis = JSON.parse(funcCleaned);
+        const judgeADiagnosis = JSON.parse(judgeACleaned);
+        let judgeBDiagnosis;
+        try { judgeBDiagnosis = JSON.parse(judgeBCleaned); } catch { judgeBDiagnosis = null; }
 
-        const resultsMap = new Map(
-          (diagnosis.results || []).map((r: { azeId: string; result: string }) => [r.azeId, r])
+        const reconciledResults = judgeBDiagnosis
+          ? reconcileVerdicts(judgeADiagnosis.results || [], judgeBDiagnosis.results || [])
+          : judgeADiagnosis.results || [];
+
+        const diagnosis = { ...judgeADiagnosis, results: reconciledResults };
+
+        const { levelResults, diagnosedLevel: calculatedLevel } = calculateDiagnosedLevel(
+          diagnosis.results,
+          WRITING_TASK2.levelClusters
         );
-
-        let calculatedLevel = "Below A1";
-        const levelResults: {
-          level: string;
-          confirmed: boolean;
-          canCount: number;
-          threshold: string;
-        }[] = [];
-
-        for (const lc of WRITING_TASK2.levelClusters) {
-          const canCount = lc.macroIds.filter((id) => {
-            const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CONFIRMED";
-          }).length;
-          const confirmed = canCount >= lc.confirmThreshold;
-          levelResults.push({
-            level: lc.level,
-            confirmed,
-            canCount,
-            threshold: `${lc.confirmThreshold}/${lc.totalMacros}`,
-          });
-          if (confirmed) calculatedLevel = lc.label;
-        }
 
         diagnosis.diagnosedLevel = calculatedLevel;
         diagnosis.levelResults = levelResults;
@@ -456,16 +459,24 @@ export async function POST(req: NextRequest) {
         diagnosis.topic = topic;
 
         let formAnalysis = null;
-        try {
-          formAnalysis = JSON.parse(formCleaned);
-        } catch {
-          console.error("Failed to parse form analysis:", formCleaned);
+        if (!hasEnoughText) {
+          formAnalysis = {
+            overallFormLevel: "Insufficient data",
+            overallFormSummary: "Not enough written text to assess language quality.",
+            dimensions: [],
+          };
+        } else {
+          try {
+            formAnalysis = JSON.parse(formCleaned);
+          } catch {
+            console.error("Failed to parse form analysis:", formCleaned);
+          }
         }
 
         return NextResponse.json({ diagnosis, formAnalysis });
       } catch {
         return NextResponse.json(
-          { error: "Failed to parse diagnosis", raw: funcRaw },
+          { error: "Failed to parse diagnosis", raw: judgeARaw },
           { status: 500 }
         );
       }

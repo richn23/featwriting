@@ -317,6 +317,10 @@ export function buildLanguageAnalysisPrompt(taskContext: TaskContext): string {
 
   return `You are a CEFR-trained language analyst. Analyse the candidate's written output using the rubric below.
 
+IMPORTANT: If the candidate's text contains fewer than 10 real words (excluding gibberish, repeated characters, or nonsense), return:
+{"overallFormLevel":"Insufficient data","overallFormSummary":"Not enough written text to assess language quality.","dimensions":[]}
+Do NOT attempt to assign a CEFR level from empty, nonsensical, or extremely brief input.
+
 TASK CONTEXT: ${contextNote}
 
 ${LANGUAGE_RUBRIC}

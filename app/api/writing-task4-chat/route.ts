@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK4 } from "../../writing/writing-task4-descriptors";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -239,71 +240,95 @@ export async function POST(req: NextRequest) {
         )
         .join("\n\n---\n\n");
 
-      const [functionRes, formRes] = await Promise.all([
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: diagnosisPrompt },
-            { role: "user", content: `Here are the candidate's responses:\n\n${responseText}` },
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-        }),
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: languageAnalysisPrompt },
-            { role: "user", content: `Candidate responses only:\n\n${candidateResponsesOnly}` },
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      ]);
+      const candidateWordCount = candidateResponsesOnly.trim().split(/\s+/).filter(Boolean).length;
+      const hasEnoughText = candidateWordCount >= 10;
 
-      const funcRaw = functionRes.choices[0].message.content || "";
-      const funcCleaned = funcRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const judgeAPrompt = diagnosisPrompt;
+      const judgeBPrompt = buildJudgeBPrompt(diagnosisPrompt);
+      const userContent = `Here are the candidate's responses:\n\n${responseText}`;
 
-      const formRaw = formRes.choices[0].message.content || "";
+      const judgeAPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: judgeAPrompt },
+          { role: "user", content: userContent },
+        ],
+        max_tokens: 4000,
+        temperature: 0.1,
+      });
+
+      const judgeBPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: judgeBPrompt },
+          { role: "user", content: userContent },
+        ],
+        max_tokens: 4000,
+        temperature: 0.1,
+      });
+
+      const formResPromise = hasEnoughText
+        ? openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: languageAnalysisPrompt },
+              { role: "user", content: `Candidate responses only:\n\n${candidateResponsesOnly}` },
+            ],
+            max_tokens: 2000,
+            temperature: 0.1,
+          })
+        : null;
+
+      const [judgeARes, judgeBRes, formRes] = await Promise.all([judgeAPromise, judgeBPromise, formResPromise]);
+
+      const judgeARaw = judgeARes.choices[0].message.content || "";
+      const judgeACleaned = judgeARaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+      const judgeBRaw = judgeBRes.choices[0].message.content || "";
+      const judgeBCleaned = judgeBRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+      const formRaw = formRes?.choices[0].message.content || "";
       const formCleaned = formRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
       try {
-        const diagnosis = JSON.parse(funcCleaned);
+        const judgeA = JSON.parse(judgeACleaned);
+        let reconciledResults = judgeA.results || [];
 
-        const resultsMap = new Map(
-          (diagnosis.results || []).map((r: { azeId: string; result: string }) => [r.azeId, r])
-        );
-
-        let calculatedLevel = "Below A2";
-        const levelResults: { level: string; confirmed: boolean; canCount: number; threshold: string }[] = [];
-
-        for (const lc of WRITING_TASK4.levelClusters) {
-          const canCount = lc.macroIds.filter((id) => {
-            const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CONFIRMED";
-          }).length;
-          const confirmed = canCount >= lc.confirmThreshold;
-          levelResults.push({
-            level: lc.level,
-            confirmed,
-            canCount,
-            threshold: `${lc.confirmThreshold}/${lc.totalMacros}`,
-          });
-          if (confirmed) calculatedLevel = lc.label;
+        try {
+          const judgeB = JSON.parse(judgeBCleaned);
+          reconciledResults = reconcileVerdicts(judgeA.results || [], judgeB.results || []);
+        } catch {
+          console.error("Judge B parse failed, using Judge A only");
         }
+
+        const diagnosis = { ...judgeA, results: reconciledResults };
+
+        const { levelResults, diagnosedLevel: calculatedLevel } = calculateDiagnosedLevel(
+          diagnosis.results || [],
+          WRITING_TASK4.levelClusters
+        );
 
         diagnosis.diagnosedLevel = calculatedLevel;
         diagnosis.levelResults = levelResults;
 
         let formAnalysis = null;
-        try {
-          formAnalysis = JSON.parse(formCleaned);
-        } catch {
-          console.error("Failed to parse form analysis:", formCleaned);
+        if (!hasEnoughText) {
+          formAnalysis = {
+            overallFormLevel: "Insufficient data",
+            overallFormSummary: "Not enough written text to assess language quality.",
+            dimensions: [],
+          };
+        } else {
+          try {
+            formAnalysis = JSON.parse(formCleaned);
+          } catch {
+            console.error("Failed to parse form analysis:", formCleaned);
+          }
         }
 
         return NextResponse.json({ diagnosis, formAnalysis });
       } catch {
-        return NextResponse.json({ error: "Failed to parse diagnosis", raw: funcRaw }, { status: 500 });
+        return NextResponse.json({ error: "Failed to parse diagnosis", raw: judgeARaw }, { status: 500 });
       }
     }
 

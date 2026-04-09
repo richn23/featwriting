@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK3, TopicOption } from "../../writing/writing-task3-descriptors";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -198,15 +199,23 @@ ${diagnosisMacroBlock}
 
 ═══ SCORING RULES ═══
 
-1. CAN = clear evidence in the writing that the candidate achieved this function.
-2. NOT_YET = the writing attempted this function but did not achieve it clearly, or no evidence exists.
-3. NOT_TESTED = use only when no opportunity to demonstrate the function existed. Otherwise NOT_YET.
-4. Be conservative: mixed evidence = NOT_YET.
-5. A single clear instance under appropriate communicative demand may be sufficient for CAN. Treat minimal evidence cautiously.
-6. Multiple weak instances do NOT combine into CAN.
-7. Clear higher-level competence may support lower-level CAN judgements when those lower functions are logically implied.
+1. CONFIRMED = clear evidence in the writing that the candidate achieved this function.
+2. NOT_DEMONSTRATED = the writing attempted this function but did not achieve it clearly, or no evidence exists.
+3. NOT_TESTED = use only when no opportunity to demonstrate the function existed. Otherwise NOT_DEMONSTRATED.
+4. Be conservative: mixed evidence = NOT_DEMONSTRATED.
+5. A single clear instance under appropriate communicative demand may be sufficient for CONFIRMED. Treat minimal evidence cautiously.
+6. Multiple weak instances do NOT combine into CONFIRMED.
+7. Clear higher-level competence may support lower-level CONFIRMED judgements when those lower functions are logically implied.
 
 IMPORTANT: Score EVERY macro. The system calculates the level from your scores.
+
+═══ CONFIDENCE LEVEL ═══
+
+For each macro judgement assign a confidence level:
+
+HIGH — clear, direct evidence of the function under appropriate communicative demand.
+MEDIUM — some evidence is present but limited in length, complexity, or clarity.
+LOW — evidence is weak, indirect, or borderline.
 
 ═══ OUTPUT FORMAT ═══
 
@@ -218,7 +227,8 @@ Respond ONLY with valid JSON:
       "claim": "Can state a like, dislike, or simple preference",
       "level": "A1",
       "fn": "Expressing",
-      "result": "CAN|NOT_YET|NOT_TESTED",
+      "result": "CONFIRMED|NOT_DEMONSTRATED|NOT_TESTED",
+      "confidence": "HIGH|MEDIUM|LOW",
       "rationale": "Short explanation (1 sentence)",
       "evidence": "Direct quote from the transcript"
     }
@@ -391,77 +401,82 @@ export async function POST(req: NextRequest) {
         .map((m: Message) => m.content)
         .join("\n");
 
-      const [functionRes, formRes] = await Promise.all([
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: diagnosisPrompt },
-            { role: "user", content: `Here is the full transcript:\n\n${transcript}` },
-          ],
-          max_tokens: 4000,
-          temperature: 0.1,
-        }),
-        openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: languageAnalysisPrompt },
-            { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
-          ],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      ]);
+      const candidateWordCount = candidateOnly.trim().split(/\s+/).filter(Boolean).length;
+      const hasEnoughText = candidateWordCount >= 10;
 
-      const funcRaw = functionRes.choices[0].message.content || "";
-      const funcCleaned = funcRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const judgeBPrompt = buildJudgeBPrompt(diagnosisPrompt);
+      const transcriptContent = `Here is the full transcript:\n\n${transcript}`;
 
-      const formRaw = formRes.choices[0].message.content || "";
+      const judgeAPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: diagnosisPrompt }, { role: "user", content: transcriptContent }],
+        max_tokens: 4000, temperature: 0.1,
+      });
+      const judgeBPromise = openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: judgeBPrompt }, { role: "user", content: transcriptContent }],
+        max_tokens: 4000, temperature: 0.1,
+      });
+
+      const formResPromise = hasEnoughText
+        ? openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: languageAnalysisPrompt },
+              { role: "user", content: `Candidate messages only:\n\n${candidateOnly}` },
+            ],
+            max_tokens: 2000, temperature: 0.1,
+          })
+        : null;
+
+      const [judgeARes, judgeBRes, formRes] = await Promise.all([judgeAPromise, judgeBPromise, formResPromise]);
+
+      const judgeARaw = judgeARes.choices[0].message.content || "";
+      const judgeBRaw = judgeBRes.choices[0].message.content || "";
+      const judgeACleaned = judgeARaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const judgeBCleaned = judgeBRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+      const formRaw = formRes?.choices[0].message.content || "";
       const formCleaned = formRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
       try {
-        const diagnosis = JSON.parse(funcCleaned);
+        const judgeADiagnosis = JSON.parse(judgeACleaned);
+        let judgeBDiagnosis;
+        try { judgeBDiagnosis = JSON.parse(judgeBCleaned); } catch { judgeBDiagnosis = null; }
 
-        const resultsMap = new Map(
-          (diagnosis.results || []).map((r: { azeId: string; result: string }) => [r.azeId, r])
+        const reconciledResults = judgeBDiagnosis
+          ? reconcileVerdicts(judgeADiagnosis.results || [], judgeBDiagnosis.results || [])
+          : judgeADiagnosis.results || [];
+
+        const diagnosis = { ...judgeADiagnosis, results: reconciledResults };
+
+        const { levelResults, diagnosedLevel: calculatedLevel } = calculateDiagnosedLevel(
+          diagnosis.results,
+          WRITING_TASK3.levelClusters
         );
-
-        let calculatedLevel = "Below A1";
-        const levelResults: {
-          level: string;
-          confirmed: boolean;
-          canCount: number;
-          threshold: string;
-        }[] = [];
-
-        for (const lc of WRITING_TASK3.levelClusters) {
-          const canCount = lc.macroIds.filter((id) => {
-            const r = resultsMap.get(id);
-            return r && (r as { result: string }).result === "CAN";
-          }).length;
-          const confirmed = canCount >= lc.confirmThreshold;
-          levelResults.push({
-            level: lc.level,
-            confirmed,
-            canCount,
-            threshold: `${lc.confirmThreshold}/${lc.totalMacros}`,
-          });
-          if (confirmed) calculatedLevel = lc.label;
-        }
 
         diagnosis.diagnosedLevel = calculatedLevel;
         diagnosis.levelResults = levelResults;
 
         let formAnalysis = null;
-        try {
-          formAnalysis = JSON.parse(formCleaned);
-        } catch {
-          console.error("Failed to parse form analysis:", formCleaned);
+        if (!hasEnoughText) {
+          formAnalysis = {
+            overallFormLevel: "Insufficient data",
+            overallFormSummary: "Not enough written text to assess language quality.",
+            dimensions: [],
+          };
+        } else {
+          try {
+            formAnalysis = JSON.parse(formCleaned);
+          } catch {
+            console.error("Failed to parse form analysis:", formCleaned);
+          }
         }
 
         return NextResponse.json({ diagnosis, formAnalysis });
       } catch {
         return NextResponse.json(
-          { error: "Failed to parse diagnosis", raw: funcRaw },
+          { error: "Failed to parse diagnosis", raw: judgeARaw },
           { status: 500 }
         );
       }
