@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK3, TopicOption } from "../../writing/writing-task3-descriptors";
-import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../writing/diagnosis-utils";
+import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -55,10 +56,29 @@ function buildLevelBlock(): string {
 function buildConversationPrompt(
   chosenTopic: TopicOption,
   switchTopic: TopicOption | null,
-  prevLevel: string
+  prevLevel: string,
+  candidateName: string,
+  task1Context: string
 ): string {
   const levelBlock = buildLevelBlock();
   const activeTopic = switchTopic ?? chosenTopic;
+
+  // Language adaptation based on previous task levels
+  const highLevels = ["B2", "B2+", "C1"];
+  const midLevels = ["A2+", "B1", "B1+"];
+  const languageBlock = highLevels.some(l => prevLevel.includes(l))
+    ? `YOUR LANGUAGE LEVEL: This candidate is UPPER-INTERMEDIATE or above. You can use natural, everyday vocabulary. Keep challenges focused but don't over-simplify.`
+    : midLevels.some(l => prevLevel.includes(l))
+    ? `YOUR LANGUAGE LEVEL: This candidate is INTERMEDIATE. Use simple, clear words. Keep sentences under 12 words. No idioms or abstract vocabulary.`
+    : `YOUR LANGUAGE LEVEL: This candidate is a BEGINNER. Use only very common, short words. Keep sentences under 8 words. One simple question — no compound questions. Example: "Do you like it?" not "Could you tell me what you think about this and why you feel that way?"`;
+
+  const nameInstruction = candidateName
+    ? `The candidate's name is ${candidateName}. Use it naturally — maximum once per turn. Do not overuse it.`
+    : `No name is available. Do not say "the candidate" — just speak naturally without a name.`;
+
+  const contextBlock = task1Context
+    ? `\nFROM EARLIER TASKS (what the candidate already discussed):\n${task1Context}\nYou may reference this briefly in your opening to make the transition feel natural.`
+    : "";
 
   return `You are an AI examiner for the AZE Writing Test — Task 3: Express & Argue.
 
@@ -66,6 +86,9 @@ YOUR ROLE: You are a debate partner. Your job is to get the candidate to express
 
 This is a natural conversation where you challenge the candidate's ideas.
 Be warm, but do not simply agree — push them to explain and justify their opinions.
+
+${nameInstruction}
+${languageBlock}
 
 ═══ TOPIC CONTROL ═══
 
@@ -79,6 +102,7 @@ ${switchTopic
   ? `CURRENT TOPIC (switched): ${activeTopic.label}\nQuestion: ${activeTopic.prompt}`
   : `CHOSEN TOPIC: ${chosenTopic.label}\nQuestion: ${chosenTopic.prompt}`
 }
+${contextBlock}
 
 ═══ RULES ═══
 
@@ -91,9 +115,10 @@ ${switchTopic
 7. When they give an opinion, challenge it using one of the challenge types below.
 8. If they defend well, increase the challenge slightly by asking for deeper reasoning, examples, or alternative perspectives.
 9. If they struggle, simplify your challenge or rephrase.
-10. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
-11. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
-12. If the candidate struggles repeatedly, reduce the complexity of your questions rather than stopping the conversation.
+10. Match your language to the candidate's level (see YOUR LANGUAGE LEVEL above).
+11. Do not end the discussion with easy agreement while there is still useful argumentative evidence to elicit. Prefer follow-up challenges, requests for reasons, examples, or counter-perspectives.
+12. Count as STRUGGLE only when the candidate cannot clearly state, support, or respond to an opinion in writing. Short answers alone are not struggle if they clearly perform the function.
+13. If the candidate struggles repeatedly, reduce the complexity of your questions rather than stopping the conversation.
 
 ═══ CHALLENGE TYPES — USE VARIETY ═══
 
@@ -129,10 +154,12 @@ ${switchTopic
 ═══ FIRST TURN (opening message only — exchange 0) ═══
 
 Apply only when generating the very first assistant message in the conversation.
-Structure it as:
+${candidateName ? `Greet ${candidateName} by name briefly.` : "Greet the candidate briefly."}
+${task1Context ? `You may briefly reference something from earlier tasks to make the transition natural (e.g. "Earlier we talked about X — now let's discuss something different.").` : ""}
+Then introduce the topic:
 "Let's talk about this: ${chosenTopic.label}."
 "${chosenTopic.prompt} What do you think?"
-Keep both parts. Maximum 2 sentences in total (the second line may combine the topic question with the opinion prompt).
+Keep it to maximum 2–3 sentences total.
 
 ═══ LEVEL GUIDE ═══
 
@@ -240,37 +267,7 @@ Respond ONLY with valid JSON:
 // LANGUAGE ANALYSIS PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
 
-const languageAnalysisPrompt = `You are a CEFR-trained language analyst. Analyse the candidate's written messages from a debate/argument task.
-
-═══ CONTEXT ═══
-
-The candidate had a written debate with an AI. Assess the language quality of the candidate's messages only. Ignore the AI examiner's messages entirely.
-
-═══ DIMENSIONS ═══
-
-For each dimension, provide a CEFR band, descriptor, and 1-2 examples:
-
-1. GRAMMAR (Range & Accuracy) — structures used, accuracy, control
-2. VOCABULARY (Range & Precision) — breadth, appropriacy, precision of argumentative language
-3. COHERENCE & COHESION — logical flow, linking, argument structure
-4. SPELLING & MECHANICS — accuracy, impact on communication
-5. COMMUNICATIVE EFFECTIVENESS — does the writing achieve its argumentative purpose?
-
-═══ OUTPUT FORMAT ═══
-
-Respond ONLY with valid JSON:
-{
-  "overallFormLevel": "B1",
-  "overallFormSummary": "2-sentence summary",
-  "dimensions": [
-    {
-      "dimension": "Grammar",
-      "level": "B1",
-      "descriptor": "One sentence",
-      "examples": ["quote 1", "quote 2"]
-    }
-  ]
-}`;
+const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +286,14 @@ export async function POST(req: NextRequest) {
       switchTopicId: switchTopicIdRaw,
       task1Level,
       task2Level,
+      candidateName: candidateNameRaw,
+      task1Context: task1ContextRaw,
+      probeRound,
+      probeTargets: probeTargetsFromClient,
+      probeExchangeCount,
     } = body;
+    const candidateName = candidateNameRaw || "";
+    const task1Context = task1ContextRaw || "";
     const chosenTopicId = chosenTopicIdRaw ?? body.chosenTopic;
     const switchTopicId = switchTopicIdRaw ?? body.switchTopic;
 
@@ -325,7 +329,7 @@ export async function POST(req: NextRequest) {
         ? WRITING_TASK3.topicOptions.find((t) => t.id === switchTopicId) ?? null
         : null;
 
-      const conversationPrompt = buildConversationPrompt(chosenTopic, switchTopic, prevLevel);
+      const conversationPrompt = buildConversationPrompt(chosenTopic, switchTopic, prevLevel, candidateName, task1Context);
       let prompt = conversationPrompt;
 
       if (exchangeCount === 0) {
@@ -392,9 +396,35 @@ export async function POST(req: NextRequest) {
 
     // ── Diagnosis ──────────────────────────────────────────────────────
     if (action === "diagnose") {
-      const transcript = (messages || [])
+      // Build transcript with topic switch markers if available
+      const chosenTopic = chosenTopicId
+        ? WRITING_TASK3.topicOptions.find((t) => t.id === chosenTopicId)
+        : null;
+      const switchTopicObj = switchTopicId
+        ? WRITING_TASK3.topicOptions.find((t) => t.id === switchTopicId)
+        : null;
+
+      const rawTranscript = (messages || [])
         .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
         .join("\n");
+
+      // Insert topic headers so the diagnosis model knows which evidence came from which topic
+      let transcript = "";
+      if (chosenTopic) {
+        transcript += `--- TOPIC 1: ${chosenTopic.label} (${chosenTopic.tier}) ---\n`;
+      }
+      transcript += rawTranscript;
+      // If there was a switch, find where the AI introduced it and insert a marker
+      if (switchTopicObj) {
+        const switchIntro = rawTranscript.split("\n").findIndex((line: string) =>
+          line.startsWith("AI:") && line.toLowerCase().includes(switchTopicObj.label.toLowerCase())
+        );
+        if (switchIntro >= 0) {
+          const lines = rawTranscript.split("\n");
+          lines.splice(switchIntro, 0, `\n--- TOPIC 2: ${switchTopicObj.label} (${switchTopicObj.tier}) ---`);
+          transcript = (chosenTopic ? `--- TOPIC 1: ${chosenTopic.label} (${chosenTopic.tier}) ---\n` : "") + lines.join("\n");
+        }
+      }
 
       const candidateOnly = (messages || [])
         .filter((m: Message) => m.role === "user")
@@ -473,7 +503,11 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        return NextResponse.json({ diagnosis, formAnalysis });
+        const probeTargets = probeRound
+          ? []
+          : identifyProbeTargets(diagnosis.results, WRITING_TASK3.levelClusters, calculatedLevel);
+
+        return NextResponse.json({ diagnosis, formAnalysis, probeTargets });
       } catch {
         return NextResponse.json(
           { error: "Failed to parse diagnosis", raw: judgeARaw },
@@ -481,6 +515,43 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+
+    // ── Probe conversation turn ─────────────────────────────────────────
+    if (action === "probe") {
+      const pExCount = typeof probeExchangeCount === "number" ? probeExchangeCount : 0;
+      const targets = probeTargetsFromClient || [];
+      const topicLabel = chosenTopicId || "the topic";
+
+      // Build signals map so probe questions are targeted
+      const signalsMap = new Map<string, string[]>();
+      for (const macro of WRITING_TASK3.azeMacro) {
+        signalsMap.set(macro.azeId, macro.signals);
+      }
+
+      const probeSystemPrompt = buildProbePrompt(
+        targets,
+        `Task: ${WRITING_TASK3.meta.title}. This is a discussion/argumentation task about "${topicLabel}."`,
+        signalsMap
+      );
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: probeSystemPrompt },
+          ...(messages || []),
+        ],
+        max_tokens: 150,
+      });
+
+      const rawMessage = response.choices[0].message.content || "";
+      const probeDoneMatch = rawMessage.match(/<probe_done>(true|false)<\/probe_done>/);
+      const probeDone = (probeDoneMatch && probeDoneMatch[1] === "true") || pExCount >= MAX_PROBE_EXCHANGES - 1;
+      const aiMessage = rawMessage.replace(/<probe_done>(true|false)<\/probe_done>/g, "").trim();
+
+      return NextResponse.json({ message: aiMessage, probeDone });
+    }
+
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {

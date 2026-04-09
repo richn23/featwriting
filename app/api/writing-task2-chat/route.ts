@@ -60,12 +60,21 @@ function buildPersonalisedPrompt(
     msg => msg.trim().split(/\s+/).filter(Boolean).length >= 1
   );
 
+  // Pick the level-appropriate writing prompt from the topic
+  const highLevels = ["B2", "B2+", "C1"];
+  const midLevels  = ["A2+", "B1", "B1+"];
+  const band: "low" | "mid" | "high" = highLevels.includes(task1Level)
+    ? "high"
+    : midLevels.includes(task1Level)
+    ? "mid"
+    : "low";
+
+  const levelPrompt = topic.writingPrompts[band];
+
   // Word range by level
-  const high = ["B2", "B2+", "C1"];
-  const mid  = ["A2+", "B1", "B1+"];
-  const suggestedWords: [number, number] = high.includes(task1Level)
+  const suggestedWords: [number, number] = band === "high"
     ? [150, 250]
-    : mid.includes(task1Level)
+    : band === "mid"
     ? [100, 180]
     : [60, 120];
 
@@ -78,14 +87,11 @@ function buildPersonalisedPrompt(
       .join("\n");
 
     return {
-      promptTitle: `Write about your experience with ${topic.label.toLowerCase()}`,
+      promptTitle: `Write about ${topic.label.toLowerCase()}`,
       promptText:
         `In the warm-up, you said:\n\n${bulletPoints}\n\n` +
-        `Now write a message to tell someone about this experience.\n\n` +
-        `In your writing:\n` +
-        `• Say what happened\n` +
-        `• Explain when or where it took place\n` +
-        `• Explain why it was important, enjoyable, or difficult\n\n` +
+        `Now use your ideas to write.\n\n` +
+        `${levelPrompt}\n\n` +
         `Write naturally — as if you are telling a friend.`,
       suggestedWords,
       topicSummary: messagesWithContent.map(m => m.trim()).join("; ").slice(0, 120),
@@ -95,11 +101,7 @@ function buildPersonalisedPrompt(
   return {
     promptTitle: `Write about ${topic.label.toLowerCase()}`,
     promptText:
-      `Write a message to tell someone about an experience you have had with ${topic.label.toLowerCase()}.\n\n` +
-      `In your writing:\n` +
-      `• Say what happened\n` +
-      `• Explain when or where it took place\n` +
-      `• Explain why it was important, enjoyable, or difficult\n\n` +
+      `${levelPrompt}\n\n` +
       `Write naturally — as if you are telling a friend.`,
     suggestedWords,
     topicSummary: topic.label,
@@ -123,20 +125,36 @@ function buildScaffoldPrompt(
   candidateName: string,
   task1Level: string,
   exchangeCount: number,
-  isFinal: boolean
+  isFinal: boolean,
+  task1Context: string
 ): string {
 
   const nameInstruction = candidateName
     ? `The candidate's name is ${candidateName}. Use it naturally — maximum once per turn. Do not overuse it.`
     : `No name is available. Do not say "the candidate" — just speak naturally without a name.`;
 
+  // Language level adaptation based on Task 1 diagnosis
+  const high = ["B2", "B2+", "C1"];
+  const mid = ["A2+", "B1", "B1+"];
+  const languageBlock = high.includes(task1Level)
+    ? `YOUR LANGUAGE LEVEL: This candidate is UPPER-INTERMEDIATE or above. You can use natural, everyday vocabulary. Keep questions focused but don't over-simplify.`
+    : mid.includes(task1Level)
+    ? `YOUR LANGUAGE LEVEL: This candidate is INTERMEDIATE. Use simple, clear words. Keep sentences under 12 words. No idioms or abstract vocabulary.`
+    : `YOUR LANGUAGE LEVEL: This candidate is a BEGINNER. Use only very common, short words. Keep sentences under 8 words. One simple question — no compound questions. Example: "What did you do?" not "Could you tell me about what happened and how it made you feel?"`;
+
+  // Task 1 context — what we already know about the candidate
+  const contextBlock = task1Context
+    ? `\nFROM TASK 1 (what the candidate already told you):\n${task1Context}\nUse this naturally — you can reference something they said in Task 1 to make the transition feel connected. For example: "In the chat earlier you mentioned X — now I'd like to ask about something different."`
+    : "";
+
   const base = `You are an AI examiner for the FEAT Writing Test — Task 2: ${WRITING_TASK2.meta.title}.
 
 THIS IS THE SCAFFOLDING PHASE. It is NOT assessed. Your only job is to warm the candidate up on the topic before they write.
 
 ${nameInstruction}
-Estimated level: ${task1Level || "unknown"}
+${languageBlock}
 Topic: ${topic.label}
+${contextBlock}
 
 SCAFFOLD SEED (use this to guide your questions — your questions must be specific to this seed, not generic):
 ${topic.scaffoldSeed}
@@ -144,7 +162,7 @@ ${topic.scaffoldSeed}
 SCAFFOLD RULES:
 1. ONE short sentence per turn — the question itself, nothing else.
 2. Do NOT add warm affirmations before the question. No "That sounds wonderful!", "Great!", "That's interesting!", "How lovely!" etc. Just ask the next question directly.
-3. Plain, neutral, friendly tone — like a form, not a conversation. Minimal words.
+3. Match your language to the candidate's level (see YOUR LANGUAGE LEVEL above).
 4. Do NOT assess, challenge, correct, or probe for ceiling.
 5. Stay on topic: ${topic.label}. Do not drift.
 6. Do NOT ask yes/no questions. Ask for a short story, memory, or description.
@@ -160,11 +178,17 @@ QUESTION PROGRESSION — follow this order strictly:
 Do NOT skip this progression. Do NOT ask about general opinions.`;
 
   if (exchangeCount === 0) {
-    return base + `\n\nThis is exchange 0 — the START. Greet ${candidateName || "the candidate"} by name in a few words, then ask about a specific experience with ${topic.label}. One sentence total.`;
+    const greeting = candidateName
+      ? `Greet ${candidateName} by name briefly.`
+      : `Greet the candidate briefly.`;
+    const t1Reference = task1Context
+      ? ` You can briefly reference something from Task 1 to make the transition natural (e.g. "Earlier you told me about X — now let's talk about something different.").`
+      : "";
+    return base + `\n\nThis is exchange 0 — the START. ${greeting}${t1Reference} Then ask about a specific experience with ${topic.label}. Keep it to one short sentence.`;
   }
 
   if (isFinal) {
-    return base + `\n\nThis is the FINAL scaffold turn. One short sentence: tell them they are ready to write. No affirmation. No question.`;
+    return base + `\n\nThis is the FINAL scaffold turn. One short sentence: tell ${candidateName || "them"} they are ready to write. No affirmation. No question.`;
   }
 
   const stageInstruction = exchangeCount === 1
@@ -311,6 +335,7 @@ export async function POST(req: NextRequest) {
       topic: topicFromClient,
       candidateName,
       task1Level,
+      task1Context,
       writingResponse,
       writtenText,
       scaffoldMessages: scaffoldMessagesFromClient,
@@ -333,7 +358,8 @@ export async function POST(req: NextRequest) {
         candidateName || "",
         task1Level || "",
         exchangeCount,
-        isFinalTurn  // tell model this is the wrap-up turn, before scaffoldDone flips
+        isFinalTurn,
+        task1Context || ""
       );
 
       const response = await openai.chat.completions.create({
@@ -391,6 +417,12 @@ export async function POST(req: NextRequest) {
           : writingPromptFromClient.promptText ?? "")
         : buildPersonalisedPrompt(topic, scaffoldMessages, task1Level || "A1").promptText;
 
+      // Determine which prompt tier was given
+      const highLevels = ["B2", "B2+", "C1"];
+      const midLevels  = ["A2+", "B1", "B1+"];
+      const effectiveLevel = task1Level || "A1";
+      const promptTier = highLevels.includes(effectiveLevel) ? "high" : midLevels.includes(effectiveLevel) ? "mid" : "low";
+
       // Guard: skip language analysis if candidate wrote almost nothing
       const candidateWordCount = writingText.trim().split(/\s+/).filter(Boolean).length;
       const hasEnoughText = candidateWordCount >= 10;
@@ -400,6 +432,10 @@ export async function POST(req: NextRequest) {
       const diagnosisUserContent =
         `Topic: ${topic.label}\n\n` +
         `Writing prompt given to candidate:\n${promptUsed}\n\n` +
+        `Prompt tier: ${promptTier.toUpperCase()} (based on Task 1 level: ${effectiveLevel})\n` +
+        `IMPORTANT: The prompt tier does NOT cap the score. A candidate given a LOW prompt who writes at B2 level scores B2. ` +
+        `The tier only matters for NOT_DEMONSTRATED verdicts — if a simpler prompt didn't demand a function (e.g. "present multiple perspectives"), ` +
+        `use NOT_TESTED rather than NOT_DEMONSTRATED.\n\n` +
         (scaffoldContext
           ? `Scaffold context (candidate's warm-up responses — for reference only, not scored):\n${scaffoldContext}\n\n`
           : "") +

@@ -25,6 +25,38 @@ Do NOT assess: argument quality, intelligence, creativity, or
 subject knowledge. A weak argument in fluent English = high form.
 A strong argument in broken English = low form.
 
+═══════════════════════════════════════════════════════════════
+CHAT REGISTER CALIBRATION (applies to chat tasks T1, T3, T5)
+═══════════════════════════════════════════════════════════════
+
+Chat writing is a distinct register. The following are NORMAL in
+a chat context and must NOT be penalised:
+
+ACCEPTABLE in chat (do not mark down):
+  - Sentence fragments as responses ("yeah good idea", "not really")
+  - Missing capitals at sentence start ("i think so", "maybe later")
+  - Missing full stops at end of messages
+  - Informal contractions ("gonna", "wanna", "gotta", "kinda")
+  - Chat abbreviations ("u", "ur", "lol", "tbh", "imo", "idk", "btw")
+  - Emoji or emoticons used as punctuation or expression
+  - Short turns (chat is turn-based — brevity is natural, not a deficit)
+  - Ellipsis as a turn boundary ("well...")
+  - Casual connectors ("like", "so yeah", "I mean")
+
+STILL DIAGNOSTIC (do count these):
+  - Verb tense errors ("I go yesterday", "he have two cat")
+  - Agreement errors ("she don't like", "they is nice")
+  - Word order errors ("I very much like it")
+  - L1 transfer patterns (missing articles, pronoun errors)
+  - Vocabulary limitations (repetition, inability to paraphrase)
+  - Inability to develop an idea beyond one clause
+  - Spelling errors on common words (not chat abbreviations)
+
+The key distinction: REGISTER CHOICES are not errors.
+A B2 writer who types "u" and "lol" in a chat is showing
+register awareness, not spelling weakness. Score the underlying
+grammar, vocabulary, and discourse — not the surface informality.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DIMENSION 1 — GRAMMAR CONTROL
 What it measures: Accuracy and range of grammatical structures.
@@ -230,15 +262,28 @@ What it measures: Surface writing accuracy.
 
 Observable signals:
   - Spelling: dictionary word match (agression → aggression)
+    IMPORTANT: Chat abbreviations (u, ur, lol, btw, imo) are NOT
+    spelling errors — they are register choices. Only count genuine
+    misspellings of attempted standard words.
   - Capitalisation: sentence starts, proper nouns, pronoun "I"
-    (i prefer → I prefer)
+    IMPORTANT: In chat, missing capitals at message start are
+    register-normal. Only penalise if capitalisation is absent
+    everywhere including proper nouns and mid-sentence "I".
   - Punctuation: full stops, commas, apostrophes, question marks
+    IMPORTANT: Missing full stops at end of chat messages are
+    register-normal. Judge punctuation WITHIN sentences (commas,
+    apostrophes) not at message boundaries.
   - Sentence boundaries: consistent, no run-ons or fragments
+    IMPORTANT: Fragments are normal in chat ("not really",
+    "yeah maybe"). Run-on sentences are still diagnostic.
   - Contraction accuracy: I'm, don't, it's (vs its)
 
-NOTE: Mechanics is less CEFR-sensitive than other dimensions.
-Chat register allows some informality. Judge frequency of errors,
-not isolated slips. A single typo ≠ low mechanics.
+NOTE: Mechanics is the LEAST discriminating dimension in chat tasks.
+Most chat conventions reduce surface mechanics without affecting
+communicative competence. Weight this dimension lower than Grammar,
+Vocabulary, and Discourse when determining the overall form level
+for chat tasks. Judge frequency of GENUINE errors, not register
+choices. A single typo ≠ low mechanics.
 
 CEFR bands:
 
@@ -310,8 +355,8 @@ export type TaskContext =
 
 export function buildLanguageAnalysisPrompt(taskContext: TaskContext): string {
   const contextNote = {
-    chat: "This is a CHAT TASK. The candidate wrote short messages in a conversational exchange. Some informality is expected. Judge language quality, not chat brevity.",
-    extended: "This is an EXTENDED WRITING TASK. The candidate wrote a longer continuous response. Hold to written register standards.",
+    chat: "This is a CHAT TASK (WhatsApp-style text conversation). The candidate typed short messages in a conversational exchange. Chat abbreviations (u, lol, btw), missing capitals, missing full stops, and sentence fragments are REGISTER CHOICES — not errors. Score the underlying grammar, vocabulary, and discourse management. Do NOT penalise chat informality. See the CHAT REGISTER CALIBRATION section in the rubric.",
+    extended: "This is an EXTENDED WRITING TASK. The candidate wrote a longer continuous response. Hold to written register standards. Chat informality IS relevant to score here.",
     transform: "This is a TRANSFORMATION TASK. Assess the candidate's REWRITTEN text only — not the original stimulus. Focus on whether they controlled language for the target register/audience.",
   }[taskContext];
 

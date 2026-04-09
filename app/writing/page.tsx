@@ -6,7 +6,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
    Types
    ═══════════════════════════════════════════════════════════════════════════ */
 
-type Message = { role: "assistant" | "user"; content: string };
+type Message = { role: "assistant" | "user"; content: string; stage?: number };
 
 type LevelCluster = {
   level: string; label: string; gseRange: [number, number];
@@ -39,14 +39,16 @@ type Diagnosis = { diagnosedLevel: string; levelResults: LevelResult[]; results:
 type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[] };
 type FormAnalysis = { overallFormLevel: string; overallFormSummary: string; dimensions: FormDimension[] };
 type WritingPrompt = { promptTitle: string; promptText: string; suggestedWords: [number, number]; topicSummary: string };
+type ProbeTarget = { azeId: string; claim: string; level: string; fn: string; confidence: string };
+type ElicitationTarget = { azeId: string; claim: string; level: string; fn: string; probeGuidance: string[] };
 
 type Phase =
   | "loading" | "landing"
-  | "t1-briefing" | "t1-conversation" | "t1-diagnosing" | "t1-results"
+  | "t1-briefing" | "t1-conversation" | "t1-probing" | "t1-eliciting" | "t1-diagnosing" | "t1-results"
   | "t2-briefing" | "t2-scaffolding" | "t2-generating-prompt" | "t2-writing" | "t2-diagnosing" | "t2-results"
-  | "t3-briefing" | "t3-topic-select" | "t3-conversation" | "t3-diagnosing" | "t3-results"
+  | "t3-briefing" | "t3-topic-select" | "t3-conversation" | "t3-probing" | "t3-diagnosing" | "t3-results"
   | "t4-briefing" | "t4-loading-stimuli" | "t4-challenges" | "t4-diagnosing" | "t4-results"
-  | "t5-briefing" | "t5-loading" | "t5-conversation" | "t5-diagnosing" | "t5-results"
+  | "t5-briefing" | "t5-loading" | "t5-conversation" | "t5-probing" | "t5-diagnosing" | "t5-results"
   | "final-report";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -131,7 +133,7 @@ const styles = `
   --not-yet: #c44536; --not-yet-light: #fce4e1;
   --not-tested: #9ca3af; --not-tested-light: #f3f4f6;
   --s-bg:#1e293b; --s-bg2:#0f172a; --s-surface:rgba(30,41,59,.6); --s-surface-border:rgba(255,255,255,.06);
-  --s-text:#e2e8f0; --s-text-muted:#94a3b8; --s-accent:#34d399; --s-accent-muted:rgba(52,211,153,.15);
+  --s-text:#f1f5f9; --s-text-muted:#cbd5e1; --s-accent:#34d399; --s-accent-muted:rgba(52,211,153,.15);
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-text); min-height:100vh; -webkit-font-smoothing:antialiased; }
@@ -1357,6 +1359,15 @@ export default function WritingTestPage() {
   const [t1ShowTranscript, setT1ShowTranscript] = useState(false);
   const t1DoneRef = useRef(false);
   const [t1Stage, setT1Stage] = useState<number>(0);
+  const [candidateName, setCandidateName] = useState("");
+  const [t1StruggleCount, setT1StruggleCount] = useState(0);
+  const [t1StageExchangeCount, setT1StageExchangeCount] = useState(0);
+  const [t1ProbeTargets, setT1ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t1ProbeCount, setT1ProbeCount] = useState(0);
+  const t1ProbeDoneRef = useRef(false);
+  const [t1ElicitTargets, setT1ElicitTargets] = useState<ElicitationTarget[]>([]);
+  const [t1ElicitCount, setT1ElicitCount] = useState(0);
+  const t1ElicitDoneRef = useRef(false);
 
   const [t2Config, setT2Config] = useState<TaskConfig | null>(null);
   const [t2ScaffoldMsgs, setT2ScaffoldMsgs] = useState<Message[]>([]);
@@ -1385,6 +1396,9 @@ export default function WritingTestPage() {
   const [t3Expanded, setT3Expanded] = useState<Set<string>>(new Set());
   const [t3ShowTranscript, setT3ShowTranscript] = useState(false);
   const t3DoneRef = useRef(false);
+  const [t3ProbeTargets, setT3ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t3ProbeCount, setT3ProbeCount] = useState(0);
+  const t3ProbeDoneRef = useRef(false);
   type TopicOption = { id: string; label: string; tier: string; prompt: string };
 
   const [t4Config, setT4Config] = useState<TaskConfig | null>(null);
@@ -1410,6 +1424,9 @@ export default function WritingTestPage() {
   const [t5Expanded, setT5Expanded] = useState<Set<string>>(new Set());
   const [t5ShowTranscript, setT5ShowTranscript] = useState(false);
   const t5DoneRef = useRef(false);
+  const [t5ProbeTargets, setT5ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t5ProbeCount, setT5ProbeCount] = useState(0);
+  const t5ProbeDoneRef = useRef(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1477,8 +1494,8 @@ export default function WritingTestPage() {
   );
 
   const startT1 = async () => {
-    t1DoneRef.current = false; setT1Stage(0); setPhase("t1-conversation"); setT1Processing(true);
-    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [], exchangeCount: 0, stage: 0 }) });
+    t1DoneRef.current = false; setT1Stage(0); setT1StruggleCount(0); setT1StageExchangeCount(0); setPhase("t1-conversation"); setT1Processing(true);
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [], exchangeCount: 0, stage: 0, struggleCount: 0, stageExchangeCount: 0 }) });
     const data = await res.json();
     setT1Messages([{ role: "assistant", content: data.message }]); setT1Processing(false);
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -1488,40 +1505,131 @@ export default function WritingTestPage() {
     const text = t1Input.trim();
     if (!text || t1Processing || t1DoneRef.current) return;
     setT1Input(""); setT1Processing(true);
-    const userMsg: Message = { role: "user", content: text };
+    const userMsg: Message = { role: "user", content: text, stage: t1Stage };
     const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
     const nextCount = t1ExchangeCount + 1; setT1ExchangeCount(nextCount);
+    // Capture name from first user response (IDENTITY stage)
+    if (t1ExchangeCount === 0 && !candidateName) {
+      // Extract likely name: take the first 1-3 capitalised words, or the whole short response
+      const words = text.trim().split(/\s+/);
+      const name = words.length <= 3
+        ? text.trim().replace(/[.!,]$/g, "")
+        : words.filter(w => /^[A-Z]/.test(w)).slice(0, 2).join(" ") || words[0];
+      if (name) setCandidateName(name);
+    }
     if (!t1Config) return;
     if (nextCount >= (t1Config.meta.maxExchanges || 12)) { await finishT1(newMsgs, nextCount); return; }
-    const chatRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMsgs, exchangeCount: nextCount, stage: t1Stage }) });
+    const chatRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMsgs, exchangeCount: nextCount, stage: t1Stage, struggleCount: t1StruggleCount, stageExchangeCount: t1StageExchangeCount }) });
     const data = await chatRes.json();
     if (data.stage !== undefined) setT1Stage(data.stage);
-    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT1Messages(updated);
+    if (data.struggleCount !== undefined) setT1StruggleCount(data.struggleCount);
+    if (data.stageExchangeCount !== undefined) setT1StageExchangeCount(data.stageExchangeCount);
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message, stage: data.stage }]; setT1Messages(updated);
     if (data.ceilingReached && nextCount >= MIN_EXCHANGES) { t1DoneRef.current = true; setT1Processing(false); await runT1Diagnosis(updated); return; }
     setT1Processing(false); setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const finishT1 = async (msgs: Message[], count: number) => {
     t1DoneRef.current = true;
-    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, exchangeCount: count, wrapUp: true, stage: t1Stage }) });
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, exchangeCount: count, wrapUp: true, stage: t1Stage, struggleCount: t1StruggleCount, stageExchangeCount: t1StageExchangeCount }) });
     const data = await res.json();
     const all = [...msgs, { role: "assistant" as const, content: data.message }];
     setT1Messages(all); setT1Processing(false); await runT1Diagnosis(all);
   };
 
-  const runT1Diagnosis = async (finalMsgs: Message[]) => {
+  const runT1Diagnosis = async (finalMsgs: Message[], isProbeRound = false, isElicitRound = false) => {
     setPhase("t1-diagnosing");
     try {
-      const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose" }) });
+      const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", probeRound: isProbeRound, elicitationRound: isElicitRound }) });
       const data = await res.json();
       if (data.diagnosis) { setT1Diagnosis(data.diagnosis); if (data.formAnalysis) setT1Form(data.formAnalysis); }
+
+      // Check if probing is needed (only on first diagnosis, not after probe/elicit)
+      if (!isProbeRound && !isElicitRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT1ProbeTargets(data.probeTargets);
+        setT1ProbeCount(0);
+        t1ProbeDoneRef.current = false;
+        setPhase("t1-probing");
+        const probeRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT1Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT1Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      // Check if elicitation is needed (after probe round or when no probes, but not after elicitation)
+      if (!isElicitRound && data.elicitationTargets && data.elicitationTargets.length > 0) {
+        setT1ElicitTargets(data.elicitationTargets);
+        setT1ElicitCount(0);
+        t1ElicitDoneRef.current = false;
+        setPhase("t1-eliciting");
+        const elicitRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "elicit", messages: finalMsgs, elicitationTargets: data.elicitationTargets, elicitationExchangeCount: 0 }) });
+        const elicitData = await elicitRes.json();
+        setT1Messages([...finalMsgs, { role: "assistant", content: elicitData.message }]);
+        setT1Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
       setPhase("t1-results");
     } catch { setPhase("t1-results"); }
   };
 
+  const sendT1Probe = async () => {
+    const text = t1Input.trim();
+    if (!text || t1Processing || t1ProbeDoneRef.current) return;
+    setT1Input(""); setT1Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
+    const nextProbeCount = t1ProbeCount + 1; setT1ProbeCount(nextProbeCount);
+
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t1ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT1Messages(updated);
+
+    if (data.probeDone) {
+      t1ProbeDoneRef.current = true;
+      setT1Processing(false);
+      await runT1Diagnosis(updated, true);
+      return;
+    }
+    setT1Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT1Elicit = async () => {
+    const text = t1Input.trim();
+    if (!text || t1Processing || t1ElicitDoneRef.current) return;
+    setT1Input(""); setT1Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
+    const nextElicitCount = t1ElicitCount + 1; setT1ElicitCount(nextElicitCount);
+
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "elicit", messages: newMsgs, elicitationTargets: t1ElicitTargets, elicitationExchangeCount: nextElicitCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT1Messages(updated);
+
+    if (data.elicitDone) {
+      t1ElicitDoneRef.current = true;
+      setT1Processing(false);
+      await runT1Diagnosis(updated, false, true);
+      return;
+    }
+    setT1Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  // Build a short context snippet from Task 1 — what the candidate told us about themselves
+  const t1ContextSnippet = useCallback(() => {
+    const userMsgs = t1Messages.filter(m => m.role === "user").map(m => m.content);
+    // Take first 3 user responses (IDENTITY + early stages) — enough for context, not overwhelming
+    return userMsgs.slice(0, 3).join(" | ").slice(0, 300);
+  }, [t1Messages]);
+
   const startT2Scaffolding = async () => {
     t2ScaffoldDoneRef.current = false; setPhase("t2-scaffolding"); setT2ScaffoldProcessing(true);
-    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: [], exchangeCount: 0, task1Transcript: t1Transcript(), task1Level: t1Diagnosis?.diagnosedLevel }) });
+    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: [], exchangeCount: 0, candidateName, task1Level: t1Diagnosis?.diagnosedLevel, task1Context: t1ContextSnippet() }) });
     const data = await res.json();
     if (data.topic) setT2Topic(data.topic);
     setT2ScaffoldMsgs([{ role: "assistant", content: data.message }]); setT2ScaffoldProcessing(false);
@@ -1535,7 +1643,7 @@ export default function WritingTestPage() {
     const userMsg: Message = { role: "user", content: text };
     const newMsgs = [...t2ScaffoldMsgs, userMsg]; setT2ScaffoldMsgs(newMsgs);
     const nextCount = t2ScaffoldCount + 1; setT2ScaffoldCount(nextCount);
-    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: newMsgs, exchangeCount: nextCount, task1Transcript: t1Transcript(), task1Level: t1Diagnosis?.diagnosedLevel }) });
+    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: newMsgs, exchangeCount: nextCount, candidateName, task1Level: t1Diagnosis?.diagnosedLevel, task1Context: t1ContextSnippet(), topic: t2Topic }) });
     const data = await res.json();
     if (data.topic) setT2Topic(data.topic);
     const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT2ScaffoldMsgs(updated);
@@ -1574,7 +1682,7 @@ export default function WritingTestPage() {
     const picked = switchOptions.length > 0 ? switchOptions[Math.floor(Math.random() * switchOptions.length)] : null;
     if (picked) setT3SwitchTopic(picked.id);
     setPhase("t3-conversation"); setT3Processing(true);
-    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, chosenTopic: topicId, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel }) });
+    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, chosenTopic: topicId, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel, candidateName, task1Context: t1ContextSnippet() }) });
     const data = await res.json();
     setT3Messages([{ role: "assistant", content: data.message }]); setT3Processing(false);
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -1590,7 +1698,7 @@ export default function WritingTestPage() {
     const maxEx = t3Config?.meta?.maxExchanges || 14;
     if (nextCount >= maxEx) { await finishT3(newMsgs, nextCount); return; }
     const shouldSwitch = t3SwitchTopic && nextCount >= 6 && nextCount <= 8;
-    const chatRes = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, chosenTopic: t3ChosenTopic, switchTopic: shouldSwitch ? t3SwitchTopic : undefined, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel }) });
+    const chatRes = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, chosenTopic: t3ChosenTopic, switchTopic: shouldSwitch ? t3SwitchTopic : undefined, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel, candidateName, task1Context: t1ContextSnippet() }) });
     const data = await chatRes.json();
     const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT3Messages(updated);
     if (data.ceilingReached && nextCount >= T3_MIN_EXCHANGES_BEFORE_CEILING) { t3DoneRef.current = true; setT3Processing(false); await runT3Diagnosis(updated); return; }
@@ -1605,14 +1713,50 @@ export default function WritingTestPage() {
     setT3Messages(all); setT3Processing(false); await runT3Diagnosis(all);
   };
 
-  const runT3Diagnosis = async (finalMsgs: Message[]) => {
+  const runT3Diagnosis = async (finalMsgs: Message[], isProbeRound = false) => {
     setPhase("t3-diagnosing");
     try {
-      const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose" }) });
+      const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", probeRound: isProbeRound, chosenTopicId: t3ChosenTopic, switchTopicId: t3SwitchTopic }) });
       const data = await res.json();
       if (data.diagnosis) { setT3Diagnosis(data.diagnosis); if (data.formAnalysis) setT3Form(data.formAnalysis); }
+
+      if (!isProbeRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT3ProbeTargets(data.probeTargets);
+        setT3ProbeCount(0);
+        t3ProbeDoneRef.current = false;
+        setPhase("t3-probing");
+        const probeRes = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT3Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT3Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
       setPhase("t3-results");
     } catch { setPhase("t3-results"); }
+  };
+
+  const sendT3Probe = async () => {
+    const text = t3Input.trim();
+    if (!text || t3Processing || t3ProbeDoneRef.current) return;
+    setT3Input(""); setT3Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t3Messages, userMsg]; setT3Messages(newMsgs);
+    const nextProbeCount = t3ProbeCount + 1; setT3ProbeCount(nextProbeCount);
+
+    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t3ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT3Messages(updated);
+
+    if (data.probeDone) {
+      t3ProbeDoneRef.current = true;
+      setT3Processing(false);
+      await runT3Diagnosis(updated, true);
+      return;
+    }
+    setT3Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const startT4 = async () => {
@@ -1632,7 +1776,8 @@ export default function WritingTestPage() {
     setPhase("t4-diagnosing");
     const responses = t4Stimuli.map(s => ({ stimulusId: s.id, instruction: s.instruction, stimulus: s.stimulus, response: t4Responses[s.id] || "" }));
     try {
-      const res = await fetch(T4_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "diagnose", responses }) });
+      const prevLevel = t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "";
+      const res = await fetch(T4_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "diagnose", responses, candidateLevel: prevLevel }) });
       const data = await res.json();
       if (data.diagnosis) { setT4Diagnosis(data.diagnosis); if (data.formAnalysis) setT4Form(data.formAnalysis); }
       setPhase("t4-results");
@@ -1645,7 +1790,7 @@ export default function WritingTestPage() {
     const stimRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get-stimulus", prevLevel }) });
     const stimData = await stimRes.json();
     if (stimData.stimulusSet) setT5StimulusSet(stimData.stimulusSet);
-    const chatRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, stimulusSetId: stimData.stimulusSet?.id }) });
+    const chatRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, stimulusSetId: stimData.stimulusSet?.id, prevLevel, candidateName, task1Context: t1ContextSnippet() }) });
     const chatData = await chatRes.json();
     setT5Messages([{ role: "assistant", content: chatData.message }]); setT5ExchangeCount(0);
     setPhase("t5-conversation"); setTimeout(() => inputRef.current?.focus(), 100);
@@ -1660,7 +1805,8 @@ export default function WritingTestPage() {
     const nextCount = t5ExchangeCount + 1; setT5ExchangeCount(nextCount);
     const maxEx = t5Config?.meta?.maxExchanges || 12;
     if (nextCount >= maxEx) { await finishT5(newMsgs, nextCount); return; }
-    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, stimulusSetId: t5StimulusSet?.id }) });
+    const prevLevel5 = t4Diagnosis?.diagnosedLevel || t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "B1";
+    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, stimulusSetId: t5StimulusSet?.id, prevLevel: prevLevel5, candidateName, task1Context: t1ContextSnippet() }) });
     const data = await res.json();
     const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT5Messages(updated);
     if (data.ceilingReached && nextCount >= T5_MIN_EXCHANGES_BEFORE_CEILING) { t5DoneRef.current = true; setT5Processing(false); await runT5Diagnosis(updated); return; }
@@ -1675,14 +1821,50 @@ export default function WritingTestPage() {
     setT5Messages(all); setT5Processing(false); await runT5Diagnosis(all);
   };
 
-  const runT5Diagnosis = async (finalMsgs: Message[]) => {
+  const runT5Diagnosis = async (finalMsgs: Message[], isProbeRound = false) => {
     setPhase("t5-diagnosing");
     try {
-      const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", stimulusSetId: t5StimulusSet?.id }) });
+      const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", stimulusSetId: t5StimulusSet?.id, probeRound: isProbeRound }) });
       const data = await res.json();
       if (data.diagnosis) { setT5Diagnosis(data.diagnosis); if (data.formAnalysis) setT5Form(data.formAnalysis); }
+
+      if (!isProbeRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT5ProbeTargets(data.probeTargets);
+        setT5ProbeCount(0);
+        t5ProbeDoneRef.current = false;
+        setPhase("t5-probing");
+        const probeRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT5Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT5Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
       setPhase("t5-results");
     } catch { setPhase("t5-results"); }
+  };
+
+  const sendT5Probe = async () => {
+    const text = t5Input.trim();
+    if (!text || t5Processing || t5ProbeDoneRef.current) return;
+    setT5Input(""); setT5Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t5Messages, userMsg]; setT5Messages(newMsgs);
+    const nextProbeCount = t5ProbeCount + 1; setT5ProbeCount(nextProbeCount);
+
+    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t5ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT5Messages(updated);
+
+    if (data.probeDone) {
+      t5ProbeDoneRef.current = true;
+      setT5Processing(false);
+      await runT5Diagnosis(updated, true);
+      return;
+    }
+    setT5Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const renderT5Card = (card: StimulusCardType) => (
@@ -1974,9 +2156,8 @@ export default function WritingTestPage() {
         <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
         <p className="landing-hero-anchor">Function-based writing assessment.</p>
         <p className="landing-hero-hook">
-          FEAT assesses writing through what learners actually do with language — explaining, interacting, and justifying — rather than a single fixed text type.
+          A mechanic is assessed by fixing an engine. A chef by preparing a dish. FEAT assesses writing the same way — through what learners actually do with language, not whether they can produce the right kind of text.
         </p>
-        <p className="landing-hero-sub">It measures what candidates can do with language, not just whether they can follow the conventions of a particular text type.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -1987,86 +2168,53 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "100ms" }}>
         <div className="landing-section-label">The problem</div>
         <div className="landing-section-body">
-          <p>Writing has changed. Most people write more today than any previous generation. They do it through messages, captions, comments, and replies — not pen and paper.</p>
-          <p>Sometimes thoughtfully. Sometimes as keyboard warriors.</p>
-          <p>Writing is how we manage relationships, navigate work, and take part in the world.</p>
-          <p>But writing assessment has changed more slowly.</p>
-          <p>Most tests still ask candidates to produce a genre: an essay, a report, a formal letter. The question becomes: can you produce the right kind of text? Format. Structure. Register. Product.</p>
-          <p>This is genre-based testing. It captures important skills, but only part of what it means to communicate in writing.</p>
-        </div>
-      </section>
-
-      {/* The gap */}
-      <section className="landing-section animate-fade-up" style={{ animationDelay: "150ms" }}>
-        <div className="landing-section-label">The gap</div>
-        <div className="landing-section-body">
-          <p>CEFR takes a different approach. Its descriptors are function-based: can the learner inform, express, argue, interact?</p>
-          <p>But many assessments aligned to CEFR are still built around genre tasks, like a timed essay, a formal complaint, or a report on a graph.</p>
-          <p>What the test claims to measure and what it actually tests don&apos;t always match.</p>
+          <p>Most writing tests ask candidates to produce a genre: an essay, a report, a formal letter. Can you produce the right kind of text? Format. Structure. Register.</p>
+          <p>This captures important skills, but only part of what it means to communicate in writing.</p>
+          <p>CEFR descriptors are function-based: can the learner inform, express, argue, interact? But many CEFR-aligned assessments are still built around genre tasks.</p>
           <p className="landing-section-pull">We test the format. We don&apos;t always test the communication.</p>
-          <p>A function-based writing assessment can narrow that gap.</p>
         </div>
       </section>
 
-      {/* A different approach */}
+      {/* The approach */}
       <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
-        <div className="landing-section-label">A different approach</div>
+        <div className="landing-section-label">The approach</div>
         <div className="landing-section-body">
-          <p>
-            FEAT starts from what learners are trying to do with language. It tests those ideas in live back-and-forth tasks, not only through a single static prompt. This is still a writing assessment. The difference is that writing is tested as interaction, not as a single static response.
-          </p>
+          <p>FEAT starts from what learners are trying to do with language. Instead of a single static prompt, it tests through live back-and-forth tasks.</p>
           <div className="landing-contrast">
             <p className="not">Instead of asking someone to write an essay about technology,</p>
             <p className="but">ask them to explain an idea to someone who does not understand it.</p>
           </div>
-          <p>They may need to justify a view when challenged, or clarify when something is not understood.</p>
-          <p>The AI does more than prompt. It responds, asks follow-ups, challenges you, and sometimes misunderstands on purpose.</p>
-          <p>That makes strengths and limits in writing easier to see.</p>
-          <p>Level comes from patterns of evidence across the session. You get a structured diagnosis, not one isolated task score.</p>
+          <p>They may need to justify a view when challenged, or clarify when something is misunderstood. The AI responds, asks follow-ups, challenges, and sometimes misunderstands on purpose.</p>
+          <p>Level comes from patterns of evidence across the full session — not one isolated task score.</p>
         </div>
       </section>
 
-      {/* A familiar model */}
-      <section className="landing-section animate-fade-up" style={{ animationDelay: "212ms" }}>
-        <div className="landing-section-label">A familiar model</div>
+      {/* How it&apos;s controlled */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "250ms" }}>
+        <div className="landing-section-label">How it&apos;s controlled</div>
         <div className="landing-section-body">
-          <p>This approach is not new.</p>
-          <p>In vocational training, people are assessed on what they can do, not just what they know. A mechanic is asked to fix an engine. A chef is asked to prepare a dish.</p>
-          <p>Language can be assessed in the same way. Not by reproducing a format, but by showing how it is used in practice.</p>
+          <p>Each task follows a defined structure. The system varies prompts and challenges within set parameters to ensure comparable difficulty across sessions.</p>
+          <p>Evidence is gathered across multiple tasks and mapped to CEFR and GSE descriptors. Scoring is based on what candidates demonstrate, not single responses or impressions.</p>
         </div>
       </section>
 
-      {/* Consistency by design */}
-      <section className="landing-section animate-fade-up" style={{ animationDelay: "225ms" }}>
-        <div className="landing-section-label">Consistency by design</div>
-        <div className="landing-section-body">
-          <p>Interactions are adaptive, but controlled.</p>
-          <p>Each task follows a defined structure. The system varies prompts and challenges within set parameters to ensure comparable difficulty.</p>
-          <p>Evidence is gathered across multiple tasks and mapped to CEFR descriptors. The result is not based on a single response, but on consistent patterns of behaviour.</p>
-        </div>
-      </section>
-
-      {/* Designed for real assessment conditions */}
-      <section className="landing-section animate-fade-up" style={{ animationDelay: "237ms" }}>
-        <div className="landing-section-label">Designed for real assessment conditions</div>
-        <div className="landing-section-body">
-          <p>A function-based assessment introduces different challenges. These have been considered in the design.</p>
-          <p>Interaction is structured to assess language, not speed. Candidates are given time to respond, and performance is evaluated across patterns of language use, not individual responses.</p>
-          <p>AI interaction is adaptive, but controlled. Tasks follow defined structures, and variation is kept within set parameters to ensure comparable difficulty.</p>
-          <p>The system focuses on observable behaviour. Scoring is based on what candidates demonstrate across tasks, rather than single responses or impressions.</p>
-          <p>Task design balances different demands. The sequence of tasks is intended to reflect real-world writing while remaining manageable within an assessment setting.</p>
-        </div>
-      </section>
-
-      {/* Split: product + how it works + what you get */}
-      <div className="landing-split-section animate-fade-up" style={{ animationDelay: "250ms" }}>
+      {/* What you get */}
+      <div className="landing-split-section animate-fade-up" style={{ animationDelay: "300ms" }}>
         <div className="landing-split-left">
-          <div className="landing-split-block-label">What this assessment does</div>
-          <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Assessing writing as communication, not just formatted text</div>
+          <div className="landing-split-block-label">What you get</div>
+          <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Two complementary outputs</div>
           <div className="landing-split-block-body">
-            <p>The assessment looks at what learners are trying to do with language: informing, explaining, narrating, justifying, adjusting for audience. Evidence comes from tasks where they write in real time and respond to the system.</p>
-            <p>Instead of one long answer in a single genre, you get a wider picture of how they handle different demands.</p>
-            <p>That keeps the focus on function and stays close to CEFR.</p>
+            <p>Most writing assessments combine everything into a single score. FEAT separates two things that are fundamentally different.</p>
+          </div>
+          <div className="landing-outputs">
+            <div className="landing-output-item">
+              <div className="landing-output-item-label fn">Function profile</div>
+              <div className="landing-output-item-desc">What the learner can do: their ability across interactional, informing, arguing, and mediating functions.</div>
+            </div>
+            <div className="landing-output-item">
+              <div className="landing-output-item-label form">Language profile</div>
+              <div className="landing-output-item-desc">How effectively they do it: control of grammar, vocabulary, coherence, and register.</div>
+            </div>
           </div>
         </div>
         <div className="landing-split-right">
@@ -2074,38 +2222,17 @@ export default function WritingTestPage() {
             <div className="landing-split-block-label">How it works</div>
             <div className="landing-split-block-title">Grounded in established frameworks</div>
             <div className="landing-split-block-body">
-              <p>We start from communicative descriptors in CEFR and GSE. We group them into broader purposes (informing, explaining, justifying, interacting) and turn them into behaviours we can test through interaction.</p>
-              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You do not get one overall task score. You get a profile of what the learner can do.</p>
+              <p>We start from communicative descriptors in CEFR and GSE, group them into broader purposes — informing, explaining, justifying, interacting — and turn them into behaviours we can test through interaction.</p>
+              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You don&apos;t get one overall task score. You get a profile of what the learner can do.</p>
             </div>
           </div>
           <div className="landing-split-block">
-            <div className="landing-split-block-label">What you get</div>
-            <div className="landing-split-block-title">Two complementary outputs</div>
+            <div className="landing-split-block-label">Scope</div>
+            <div className="landing-split-block-title">What this does and doesn&apos;t replace</div>
             <div className="landing-split-block-body">
-              <p>Most writing assessments combine everything into a single score. This function-based writing assessment separates two things that are fundamentally different.</p>
+              <p>Academic writing, professional genres, and extended composition remain important and need their own tools.</p>
+              <p>For general English, testing purpose and communication in context offers a flexible, CEFR-aligned way to diagnose ability without depending on fixed text types alone.</p>
             </div>
-            <div className="landing-outputs">
-              <div className="landing-output-item">
-                <div className="landing-output-item-label fn">Function profile</div>
-                <div className="landing-output-item-desc">What the learner can do: their ability across interactional, informing, arguing, and mediating functions.</div>
-              </div>
-              <div className="landing-output-item">
-                <div className="landing-output-item-label form">Language profile</div>
-                <div className="landing-output-item-desc">How effectively they do it: control of grammar, vocabulary, coherence, and register.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Design principle */}
-      <div className="landing-principle animate-fade-up" style={{ animationDelay: "300ms" }}>
-        <div className="landing-principle-inner">
-          <div className="landing-principle-label">Design principle</div>
-          <div className="landing-principle-text">
-            <p>Writing is assessed as communication, not just as formatted product. The aim is to see what a learner can express and achieve with language, beyond sticking to a particular genre template.</p>
-            <p>The assessment is not designed to replace every form of writing assessment. Academic writing, professional genres, and extended composition remain important and need their own tools.</p>
-            <p>For general English, looking at purpose and how people use language in context offers a flexible, CEFR-aligned way to diagnose ability without depending only on fixed text types.</p>
           </div>
         </div>
       </div>
@@ -2136,7 +2263,7 @@ export default function WritingTestPage() {
       {/* Final CTA */}
       <div className="landing-final-cta animate-fade-up" style={{ animationDelay: "400ms" }}>
         <h2 className="landing-final-cta-title">A more direct reflection<br/>of <em>writing ability</em></h2>
-        <p className="landing-final-cta-sub">This function-based writing assessment measures what you can do with language first. It then looks at form on its own. That gives a clearer view of what learners can do and how they do it.</p>
+        <p className="landing-final-cta-sub">Function first. Form second. A clearer view of what learners can do with language and how they do it.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -2229,6 +2356,8 @@ export default function WritingTestPage() {
   );
 
   if (phase === "t1-conversation") return wrap(renderPhoneChat("Writing Examiner", "Task 1 · Diagnostic Chat", t1Messages, t1Input, setT1Input, t1Processing, t1DoneRef, sendT1, t1ExchangeCount, t1Config.meta.maxExchanges || 12, undefined, () => { void finishT1(t1Messages, t1ExchangeCount); }));
+  if (phase === "t1-probing") return wrap(renderPhoneChat("Writing Examiner", "Task 1 · Follow-up Questions", t1Messages, t1Input, setT1Input, t1Processing, t1ProbeDoneRef, sendT1Probe, t1ProbeCount, 3));
+  if (phase === "t1-eliciting") return wrap(renderPhoneChat("Writing Examiner", "Task 1 · A Few More Questions", t1Messages, t1Input, setT1Input, t1Processing, t1ElicitDoneRef, sendT1Elicit, t1ElicitCount, 3));
   if (phase === "t1-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing function and language…</p></div></main>);
   if (phase === "t1-results") return wrap(<main className="results-page">{renderResultsDashboard("Task 1 · Diagnostic Results", 1, t1Config, t1Diagnosis, t1Form, t1Expanded, setT1Expanded, t1ShowTranscript, setT1ShowTranscript, t1Messages, () => setPhase("t2-briefing"), "Continue to Task 2 →")}</main>);
 
@@ -2354,6 +2483,7 @@ export default function WritingTestPage() {
     return wrap(<main className="topic-page"><div className="topic-frame animate-slide-up"><h2>Pick a Topic</h2><p>Choose the topic you&apos;d like to discuss. The AI will challenge your opinions!</p><div className="topic-grid">{familiarTopics.map((t) => (<button key={t.id} className="topic-btn" onClick={() => startT3(t.id)}>{t.label}</button>))}</div></div></main>);
   }
   if (phase === "t3-conversation") return wrap(<div className="debate-accent">{renderPhoneChat("Debate Partner", "Task 3 · Express & Argue", t3Messages, t3Input, setT3Input, t3Processing, t3DoneRef, sendT3, t3ExchangeCount, t3Config?.meta?.maxExchanges || 14, undefined, () => { void finishT3(t3Messages, t3ExchangeCount); })}</div>);
+  if (phase === "t3-probing") return wrap(<div className="debate-accent">{renderPhoneChat("Debate Partner", "Task 3 · Follow-up Questions", t3Messages, t3Input, setT3Input, t3Processing, t3ProbeDoneRef, sendT3Probe, t3ProbeCount, 3)}</div>);
   if (phase === "t3-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your arguments…</p></div></main>);
   if (phase === "t3-results" && t3Config) return wrap(<main className="results-page">{renderResultsDashboard("Task 3 · Express & Argue Results", 3, t3Config, t3Diagnosis, t3Form, t3Expanded, setT3Expanded, t3ShowTranscript, setT3ShowTranscript, t3Messages, () => setPhase("t4-briefing"), "Continue to Task 4 →")}</main>);
 
@@ -2468,6 +2598,12 @@ export default function WritingTestPage() {
     <div className="t5-split">
       <div className="t5-cards-bar">{renderT5Card(t5StimulusSet.cardA)}{renderT5Card(t5StimulusSet.cardB)}</div>
       <div className="t5-chat-area t5-accent">{renderPhoneChat("Adviser", "Task 5 · Compare & Advise", t5Messages, t5Input, setT5Input, t5Processing, t5DoneRef, sendT5, t5ExchangeCount, t5Config?.meta?.maxExchanges || 12, undefined, () => { void finishT5(t5Messages, t5ExchangeCount); })}</div>
+    </div>
+  );
+  if (phase === "t5-probing" && t5StimulusSet) return wrap(
+    <div className="t5-split">
+      <div className="t5-cards-bar">{renderT5Card(t5StimulusSet.cardA)}{renderT5Card(t5StimulusSet.cardB)}</div>
+      <div className="t5-chat-area t5-accent">{renderPhoneChat("Adviser", "Task 5 · Follow-up Questions", t5Messages, t5Input, setT5Input, t5Processing, t5ProbeDoneRef, sendT5Probe, t5ProbeCount, 3)}</div>
     </div>
   );
   if (phase === "t5-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your advice…</p></div></main>);

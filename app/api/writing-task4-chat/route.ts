@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK4 } from "../../writing/writing-task4-descriptors";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
+import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -126,41 +127,40 @@ Respond ONLY with valid JSON:
 // LANGUAGE ANALYSIS PROMPT (FORM)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const languageAnalysisPrompt = `You are a CEFR-trained language analyst. Analyse the candidate's written responses from a rephrasing/register task.
-
-═══ CONTEXT ═══
-
-The candidate rewrote several texts to change their register, simplify, or adapt for different audiences. Assess the language quality of their rewrites only. Do not evaluate or quote from the original stimulus texts.
-
-Do not evaluate the complexity or difficulty of the original stimulus texts. Judge only the candidate’s ability to control grammar, vocabulary, coherence, and pragmatic effectiveness in their own rewrite — not how demanding the source material was.
-
-═══ DIMENSIONS ═══
-
-1. GRAMMAR (Range & Accuracy) - structures used, accuracy, control across registers
-2. VOCABULARY (Range & Precision) - ability to select vocabulary appropriate to target register
-3. COHERENCE & COHESION - do the rewrites flow naturally?
-4. SPELLING & MECHANICS - accuracy
-5. PRAGMATIC EFFECTIVENESS - does the rewrite actually achieve its communicative goal?
-
-═══ OUTPUT FORMAT ═══
-
-Respond ONLY with valid JSON:
-{
-  "overallFormLevel": "B1",
-  "overallFormSummary": "2-sentence summary",
-  "dimensions": [
-    {
-      "dimension": "Grammar",
-      "level": "B1",
-      "descriptor": "One sentence",
-      "examples": ["quote 1", "quote 2"]
-    }
-  ]
-}`;
+const languageAnalysisPrompt = buildLanguageAnalysisPrompt("transform");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API Handler
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adapt instruction language to candidate level
+// ─────────────────────────────────────────────────────────────────────────────
+
+function adaptInstruction(instruction: string, candidateLevel: string): string {
+  const highLevels = ["B2", "B2+", "C1"];
+  const midLevels = ["A2+", "B1", "B1+"];
+
+  if (highLevels.includes(candidateLevel)) {
+    // High candidates get the instruction as-is
+    return instruction;
+  }
+
+  if (midLevels.includes(candidateLevel)) {
+    // Mid candidates get a slightly simpler framing
+    return instruction;
+  }
+
+  // Low candidates (Pre-A1, A1, A2) — add a simple helper line
+  const simplifications: Record<string, string> = {
+    "Rewrite this sentence using simpler, everyday words.":
+      "Read the sentence below. Can you say it in a simpler way?",
+    "Rewrite this sentence in your own words. Keep the same meaning.":
+      "Read the sentence below. Write it again using your own words. Say the same thing.",
+  };
+
+  return simplifications[instruction] ?? instruction;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -219,12 +219,18 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ stimuli: selected });
+      // Adapt instruction language to candidate level
+      const adapted = selected.map(s => ({
+        ...s,
+        instruction: adaptInstruction(s.instruction, level),
+      }));
+
+      return NextResponse.json({ stimuli: adapted });
     }
 
     // ── Diagnose all responses ─────────────────────────────────────────
     if (action === "diagnose") {
-      const { responses } = body;
+      const { responses, candidateLevel } = body;
 
       // Send candidate responses only to form analysis
       const candidateResponsesOnly = (responses || [])
@@ -245,7 +251,15 @@ export async function POST(req: NextRequest) {
 
       const judgeAPrompt = diagnosisPrompt;
       const judgeBPrompt = buildJudgeBPrompt(diagnosisPrompt);
-      const userContent = `Here are the candidate's responses:\n\n${responseText}`;
+
+      const levelContext = candidateLevel
+        ? `Candidate's diagnosed level from previous tasks: ${candidateLevel}\n` +
+          `This does NOT cap the score. A candidate diagnosed A2 who transforms at B2 level scores B2. ` +
+          `The level context helps calibrate expectations — if stimuli were selected for a lower level, ` +
+          `higher-level macros that had no realistic opportunity should be NOT_TESTED, not NOT_DEMONSTRATED.\n\n`
+        : "";
+
+      const userContent = `${levelContext}Here are the candidate's responses:\n\n${responseText}`;
 
       const judgeAPromise = openai.chat.completions.create({
         model: "gpt-4o",

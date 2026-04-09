@@ -94,6 +94,230 @@ export function calculateDiagnosedLevel(
 
 
 /**
+ * Probe target identification.
+ *
+ * After initial diagnosis, identifies MEDIUM-confidence CONFIRMED macros
+ * at the boundary level (the diagnosed level or one above). These are
+ * candidates for follow-up probing to firm up confidence.
+ *
+ * Returns an array of probe targets — empty if no probing needed.
+ */
+export type ProbeTarget = {
+  azeId: string;
+  claim: string;
+  level: string;
+  fn: string;
+  confidence: string;
+};
+
+export function identifyProbeTargets(
+  results: MacroVerdict[],
+  levelClusters: LevelCluster[],
+  diagnosedLevel: string
+): ProbeTarget[] {
+  // Find the diagnosed level cluster and one above it
+  const clusterLabels = levelClusters.map(lc => lc.label);
+  const diagIdx = clusterLabels.indexOf(diagnosedLevel);
+
+  // Gather macroIds at the diagnosed level and one above
+  const targetLevels = new Set<string>();
+  if (diagIdx >= 0) targetLevels.add(clusterLabels[diagIdx]);
+  if (diagIdx >= 0 && diagIdx + 1 < clusterLabels.length) targetLevels.add(clusterLabels[diagIdx + 1]);
+
+  // If diagnosed level is "Below Pre-A1", target the first cluster
+  if (diagnosedLevel === "Below Pre-A1" && clusterLabels.length > 0) {
+    targetLevels.add(clusterLabels[0]);
+  }
+
+  return results
+    .filter(r =>
+      r.result === "CONFIRMED" &&
+      r.confidence === "MEDIUM" &&
+      targetLevels.has(r.level)
+    )
+    .map(r => ({
+      azeId: r.azeId,
+      claim: r.claim,
+      level: r.level,
+      fn: r.fn,
+      confidence: r.confidence!,
+    }));
+}
+
+/**
+ * Builds a probe prompt for the conversation AI.
+ *
+ * Given macro targets, generates a system prompt that asks 2-3 targeted
+ * follow-up questions designed to elicit evidence for those specific
+ * communicative functions.
+ */
+export function buildProbePrompt(
+  probeTargets: ProbeTarget[],
+  taskContext: string,
+  signalsMap?: Map<string, string[]>
+): string {
+  const targetList = probeTargets
+    .map(t => {
+      const signals = signalsMap?.get(t.azeId);
+      const signalBlock = signals && signals.length > 0
+        ? `\n      Look for: ${signals.join("; ")}`
+        : "";
+      return `  - ${t.fn} (${t.level}): "${t.claim}"${signalBlock}`;
+    })
+    .join("\n");
+
+  return `You are an AI examiner conducting FOLLOW-UP PROBES for a FEAT writing assessment.
+
+${taskContext}
+
+The initial assessment identified some functions where evidence was unclear. You need to ask 2-3 SHORT follow-up questions to gather better evidence for these specific functions:
+
+${targetList}
+
+PROBE RULES:
+1. Ask ONE question per turn — short, direct, natural.
+2. Each question must specifically target one of the functions above.
+3. Use the "Look for" hints to craft a question that would naturally elicit that evidence.
+4. Do NOT explain why you are asking. Do NOT reference assessment or levels.
+5. Keep the conversation natural — as if you just thought of something else to ask.
+6. After 2-3 questions, say "Thank you, that's everything." and add <probe_done>true</probe_done>.
+7. Do NOT add warm affirmations. Just ask the question.
+
+Start with your first follow-up question now.`;
+}
+
+// Maximum probe exchanges before forcing completion
+export const MAX_PROBE_EXCHANGES = 3;
+
+
+/**
+ * Elicitation target identification.
+ *
+ * After diagnosis (and after any probe round), identifies NOT_DEMONSTRATED
+ * macros at the boundary where confirming them could push the candidate
+ * up a level. These need NEW conversational conditions — different from
+ * probing, which re-examines existing evidence.
+ *
+ * Returns empty if:
+ *  - The next level up is already confirmed
+ *  - No NOT_DEMONSTRATED macros exist at the boundary
+ *  - Confirming those macros still wouldn't reach the threshold
+ */
+export type ElicitationTarget = {
+  azeId: string;
+  claim: string;
+  level: string;
+  fn: string;
+  probeGuidance: string[];
+};
+
+export function identifyElicitationTargets(
+  results: MacroVerdict[],
+  levelClusters: LevelCluster[],
+  diagnosedLevel: string,
+  macroLookup: Map<string, { probeGuidance: string[] }>
+): ElicitationTarget[] {
+  const clusterLabels = levelClusters.map(lc => lc.label);
+  const diagIdx = clusterLabels.indexOf(diagnosedLevel);
+
+  // Look at the next level up — that's where elicitation matters
+  // (if diagnosed level itself isn't confirmed, look at that too)
+  const targetClusters: LevelCluster[] = [];
+  if (diagIdx >= 0 && diagIdx + 1 < levelClusters.length) {
+    targetClusters.push(levelClusters[diagIdx + 1]);
+  }
+  // Also check the diagnosed level if it's the first cluster and barely confirmed
+  if (diagnosedLevel === "Below Pre-A1" && levelClusters.length > 0) {
+    targetClusters.push(levelClusters[0]);
+  }
+
+  const resultsMap = new Map(results.map(r => [r.azeId, r]));
+  const targets: ElicitationTarget[] = [];
+
+  for (const cluster of targetClusters) {
+    // How many are already confirmed at this cluster?
+    const confirmedCount = cluster.macroIds.filter(id => {
+      const r = resultsMap.get(id);
+      return r ? isConfirmedForThreshold(r) : false;
+    }).length;
+
+    // How many are NOT_DEMONSTRATED (potential for elicitation)?
+    const notDemonstrated = cluster.macroIds.filter(id => {
+      const r = resultsMap.get(id);
+      return r && r.result === "NOT_DEMONSTRATED";
+    });
+
+    // Would confirming the NOT_DEMONSTRATED ones reach the threshold?
+    const potentialCount = confirmedCount + notDemonstrated.length;
+    if (potentialCount < cluster.confirmThreshold) continue; // Even with all elicited, can't reach threshold
+    if (confirmedCount >= cluster.confirmThreshold) continue; // Already confirmed, no need
+
+    // How many do we actually need?
+    const needed = cluster.confirmThreshold - confirmedCount;
+
+    // Pick the NOT_DEMONSTRATED macros (up to what's needed, max 2 to keep it short)
+    const toElicit = notDemonstrated.slice(0, Math.min(needed, 2));
+
+    for (const azeId of toElicit) {
+      const verdict = resultsMap.get(azeId);
+      const macro = macroLookup.get(azeId);
+      if (!verdict || !macro) continue;
+
+      targets.push({
+        azeId,
+        claim: verdict.claim,
+        level: verdict.level,
+        fn: verdict.fn,
+        probeGuidance: macro.probeGuidance,
+      });
+    }
+  }
+
+  return targets;
+}
+
+/**
+ * Builds an elicitation prompt — creates NEW conversational conditions
+ * to test functions that weren't demonstrated in the main conversation.
+ *
+ * Unlike probe prompts (which re-examine unclear evidence), elicitation
+ * prompts create opportunities from scratch using the macro's probeGuidance.
+ */
+export function buildElicitationPrompt(
+  targets: ElicitationTarget[],
+  taskContext: string
+): string {
+  const targetList = targets
+    .map(t => {
+      const guidance = t.probeGuidance.map(g => `      • ${g}`).join("\n");
+      return `  ${t.fn} (${t.level}): "${t.claim}"\n    How to test:\n${guidance}`;
+    })
+    .join("\n\n");
+
+  return `You are an AI examiner conducting ADDITIONAL QUESTIONS for a FEAT writing assessment.
+
+${taskContext}
+
+The candidate has finished the main conversation. The assessment found that some functions were NOT tested or not demonstrated. You need to ask 2-3 SHORT, natural follow-up questions to give the candidate a chance to show these abilities:
+
+${targetList}
+
+ELICITATION RULES:
+1. Ask ONE question per turn — short, direct, natural.
+2. Use the "How to test" guidance to design your question. Pick the approach most likely to get a response.
+3. Do NOT explain why you are asking. Do NOT reference assessment, levels, or functions.
+4. Frame it naturally: "Oh, one more thing..." or "I was also curious..." or "By the way..."
+5. If the candidate gives a weak or off-topic response, try ONE rephrase, then move on.
+6. After asking about each function (2-3 questions total), say "Thanks, that's all from me!" and add <probe_done>true</probe_done>.
+7. Do NOT add warm affirmations. Just ask the question.
+
+Start with your first question now.`;
+}
+
+export const MAX_ELICITATION_EXCHANGES = 3;
+
+
+/**
  * Dual-judge reconciliation.
  *
  * Two independent diagnosis calls score the same transcript. This function

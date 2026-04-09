@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK5, StimulusSet } from "../../writing/writing-task5-descriptors";
 import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
-import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../writing/diagnosis-utils";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -86,7 +86,13 @@ const diagnosisMacroBlock = WRITING_TASK5.levelClusters
 // CONVERSATION PROMPT BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildConversationPrompt(stimSet: StimulusSet | null, stage: 1 | 2 | 3 | 4 | 5): string {
+function buildConversationPrompt(
+  stimSet: StimulusSet | null,
+  stage: 1 | 2 | 3 | 4 | 5,
+  prevLevel: string,
+  candidateName: string,
+  task1Context: string
+): string {
   const cardDesc = (card: StimulusSet["cardA"]) =>
     `${card.name} (${card.rating}★, ${card.price} ${card.priceNote ?? ""}): ` +
     card.features.map(f => `${f.label}: ${f.value}`).join(" | ");
@@ -112,11 +118,32 @@ function buildConversationPrompt(stimSet: StimulusSet | null, stage: 1 | 2 | 3 |
       "Change the situation clearly (e.g. \"Now imagine the person has a different need…\" or a new priority). Ask for a NEW recommendation and a short explanation of how and why their advice changed compared to before.",
   };
 
+  // Language adaptation
+  const highLevels = ["B2", "B2+", "C1"];
+  const midLevels = ["A2+", "B1", "B1+"];
+  const languageBlock = highLevels.some(l => prevLevel.includes(l))
+    ? `YOUR LANGUAGE LEVEL: This candidate is UPPER-INTERMEDIATE or above. You can use natural, everyday vocabulary. Keep questions focused but don't over-simplify.`
+    : midLevels.some(l => prevLevel.includes(l))
+    ? `YOUR LANGUAGE LEVEL: This candidate is INTERMEDIATE. Use simple, clear words. Keep sentences under 12 words. No idioms or abstract vocabulary.`
+    : `YOUR LANGUAGE LEVEL: This candidate is a BEGINNER. Use only very common, short words. Keep sentences under 8 words. One simple question — no compound questions.`;
+
+  const nameInstruction = candidateName
+    ? `The candidate's name is ${candidateName}. Use it naturally — maximum once per turn.`
+    : `No name is available. Just speak naturally without a name.`;
+
+  const contextBlock = task1Context
+    ? `\nFROM EARLIER TASKS:\n${task1Context}\nYou may reference this briefly in your opening to make the transition natural.`
+    : "";
+
   return `You are an AI examiner for the AZE Writing Test — Task 5: Compare & Advise.
 
 YOUR ROLE: The candidate sees two option cards. You elicit written mediation — relaying information from the cards to match needs. This tests pragmatic control of advice, not general knowledge.
 
+${nameInstruction}
+${languageBlock}
+
 ${cardBlock}
+${contextBlock}
 
 ═══ CURRENT STAGE (STRICT — FOLLOW THIS; DO NOT SKIP AHEAD) ═══
 
@@ -139,6 +166,7 @@ Stay focused on the two options provided. Do not introduce unrelated topics or h
 1. ONE question (or one short prompt) at a time. Maximum 2 sentences per turn.
 2. Be warm and conversational.
 3. Do not decide stage yourself — use the CURRENT STAGE above only.
+4. Match your language to the candidate's level (see YOUR LANGUAGE LEVEL above).
 
 ═══ CEILING SIGNAL (ADVISORY ONLY) ═══
 
@@ -239,7 +267,9 @@ const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, messages, exchangeCount, wrapUp, stimulusSetId, prevLevel } = body;
+    const { action, messages, exchangeCount, wrapUp, stimulusSetId, prevLevel, candidateName: candidateNameRaw, task1Context: task1ContextRaw, probeRound, probeTargets: probeTargetsFromClient, probeExchangeCount } = body;
+    const candidateName = candidateNameRaw || "";
+    const task1Context = task1ContextRaw || "";
     const exCount = typeof exchangeCount === "number" ? exchangeCount : 0;
 
     // ── Select stimulus set ────────────────────────────────────────────
@@ -277,11 +307,13 @@ export async function POST(req: NextRequest) {
       }
 
       const stage = getT5Stage(exCount);
-      let prompt = buildConversationPrompt(stimSet, stage);
+      let prompt = buildConversationPrompt(stimSet, stage, prevLevel || "", candidateName, task1Context);
 
       if (exCount === 0) {
+        const greet = candidateName ? `Greet ${candidateName} by name briefly. ` : "";
+        const t1Ref = task1Context ? `You may briefly reference something from earlier tasks. ` : "";
         prompt +=
-          `\n\nThis is the START (first assistant message). Open in two short sentences only:\n` +
+          `\n\nThis is the START (first assistant message). ${greet}${t1Ref}Open in two short sentences only:\n` +
           `1) Say that here are two options (you may say "Here are two options.").\n` +
           `2) Ask them to describe the main differences between them — e.g. "Can you tell me the main differences between them?"\n` +
           `Do not ask for a recommendation yet. Add <ceiling>false</ceiling>.`;
@@ -321,9 +353,20 @@ export async function POST(req: NextRequest) {
           ? WRITING_TASK5.stimulusSets.find(s => s.id === stimulusSetId) ?? null
           : null;
 
-      const transcript = (messages || [])
-        .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
-        .join("\n");
+      // Build transcript with stage markers so diagnosis knows which evidence came from which stage
+      let userCount = 0;
+      const transcriptLines: string[] = [];
+      let currentStage = 0;
+      for (const m of (messages || []) as Message[]) {
+        if (m.role === "user") userCount++;
+        const stage = getT5Stage(m.role === "assistant" ? userCount : userCount - 1);
+        if (stage !== currentStage) {
+          currentStage = stage;
+          transcriptLines.push(`\n--- ${T5_STAGE_LABEL[stage]} ---`);
+        }
+        transcriptLines.push(`${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`);
+      }
+      const transcript = transcriptLines.join("\n");
 
       const candidateOnly = (messages || [])
         .filter((m: Message) => m.role === "user")
@@ -421,7 +464,11 @@ export async function POST(req: NextRequest) {
           try { formAnalysis = JSON.parse(formCleaned); } catch { /* skip */ }
         }
 
-        return NextResponse.json({ diagnosis, formAnalysis });
+        const probeTargets = probeRound
+          ? []
+          : identifyProbeTargets(diagnosis.results, WRITING_TASK5.levelClusters, calculatedLevel);
+
+        return NextResponse.json({ diagnosis, formAnalysis, probeTargets });
       } catch {
         return NextResponse.json(
           { error: "Failed to parse diagnosis", raw: judgeARaw },
@@ -429,6 +476,42 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+
+    // ── Probe conversation turn ─────────────────────────────────────────
+    if (action === "probe") {
+      const pExCount = typeof probeExchangeCount === "number" ? probeExchangeCount : 0;
+      const targets = probeTargetsFromClient || [];
+
+      // Build signals map so probe questions are targeted
+      const signalsMap = new Map<string, string[]>();
+      for (const macro of WRITING_TASK5.azeMacro) {
+        signalsMap.set(macro.azeId, macro.signals);
+      }
+
+      const probeSystemPrompt = buildProbePrompt(
+        targets,
+        `Task: ${WRITING_TASK5.meta.title}. This is a compare-and-advise discussion task.`,
+        signalsMap
+      );
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: probeSystemPrompt },
+          ...(messages || []),
+        ],
+        max_tokens: 150,
+      });
+
+      const rawMessage = response.choices[0].message.content || "";
+      const probeDoneMatch = rawMessage.match(/<probe_done>(true|false)<\/probe_done>/);
+      const probeDone = (probeDoneMatch && probeDoneMatch[1] === "true") || pExCount >= MAX_PROBE_EXCHANGES - 1;
+      const aiMessage = rawMessage.replace(/<probe_done>(true|false)<\/probe_done>/g, "").trim();
+
+      return NextResponse.json({ message: aiMessage, probeDone });
+    }
+
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK1, Topic } from "../../writing/writing-descriptors";
 import { getSupabase } from "../../lib/supabase";
-import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../writing/diagnosis-utils";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES, identifyElicitationTargets, buildElicitationPrompt, MAX_ELICITATION_EXCHANGES, ElicitationTarget } from "../../writing/diagnosis-utils";
+import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -11,6 +12,7 @@ const openai = new OpenAI({
 type Message = {
   role: "assistant" | "user";
   content: string;
+  stage?: number;
 };
 
 
@@ -33,23 +35,55 @@ type Stage = typeof STAGES[keyof typeof STAGES];
 // ─────────────────────────────────────────────────────────────────────────────
 // RESPONSE ANALYSIS
 //
-// Analyses the candidate's last message for length and communicative substance.
-// Used to gate stage advancement and trigger probe enforcement.
+// Analyses the candidate's last message for communicative substance.
+// Used to gate stage advancement and trigger ceiling detection.
+//
+// "Weak" means: not enough communicative content to count as evidence
+// for the current stage. This gates whether the stage advances or holds.
+//
+// Key principle: a response is substantive if it COMMUNICATES something —
+// not just whether it contains a reasoning word like "because."
+// "I went to Paris last summer and the food was incredible" is strong
+// evidence even without explicit reasoning.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Common filler responses that look like answers but carry no real content
+const FILLER_PATTERNS = /^\s*(yes|no|ok|okay|yeah|sure|i think so|i don't know|i dont know|maybe|i agree|i disagree|that's right|it's good|it's nice|i like it|not really|i'm not sure|thank you|thanks)\s*[.!?]?\s*$/i;
+
 function analyseResponse(text: string) {
-  const length = text.trim().split(/\s+/).length;
-  const hasReason = /(because|so|since|as|that's why|therefore|which is why)/i.test(text);
-  const hasDetail = length > 10;
-  const hasClause = /(and|but|although|however|when|if|while|though)/i.test(text);
+  const trimmed = text.trim();
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const length = words.length;
+
+  // Any clause connector — shows the candidate is building structure,
+  // not just giving a one-clause answer
+  const hasConnector = /(and|but|because|so|since|although|however|when|if|while|though|after|before|then|also|or)/i.test(trimmed);
+
+  // Reasoning specifically (subset of connectors)
+  const hasReason = /(because|so|since|that's why|therefore|which is why|the reason)/i.test(trimmed);
+
+  // Detail: enough words to contain real content
+  const hasDetail = length > 7;
+
+  // Filler: matches a stock phrase with no real information
+  const isFiller = FILLER_PATTERNS.test(trimmed);
+
+  // ── isWeak logic ──
+  // Under 4 words: almost always too short (but fine for IDENTITY stage —
+  //   stage logic handles that separately)
+  // 4-7 words without any connector: bare minimum, probably not enough
+  // 8+ words: enough content to constitute evidence
+  // Filler: weak regardless of length
+  // Any connector present: shows clause-building, not weak
+  const isWeak = isFiller || length < 4 || (length < 8 && !hasConnector);
 
   return {
     length,
     hasReason,
     hasDetail,
-    hasClause,
-    isVeryShort: length < 5,
-    isWeak: length < 6 || (!hasReason && length < 12),
+    hasConnector,
+    isVeryShort: length < 4,
+    isWeak,
   };
 }
 
@@ -86,11 +120,17 @@ function getTargetFunction(stage: Stage): string {
 // jump to MISINTERPRET (ceiling probe).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Maximum exchanges allowed in OPINION_REASON before moving on.
+// If the candidate can't produce reasoning after 2 attempts,
+// that IS the diagnostic signal — they can't do B1 reasoning.
+const MAX_OPINION_EXCHANGES = 2;
+
 function computeNextStage(
   currentStage: Stage,
   exchangeCount: number,
   analysis: ReturnType<typeof analyseResponse>,
-  struggleCount: number
+  struggleCount: number,
+  stageExchangeCount: number
 ): Stage {
 
   // Stay in stage if weak but not yet at ceiling threshold
@@ -103,13 +143,21 @@ function computeNextStage(
     return STAGES.MISINTERPRET;
   }
 
-  // Normal progression
+  // Normal progression — IDENTITY exits after exchange 1 (name + location/work)
   if (currentStage === STAGES.IDENTITY) {
-    return exchangeCount >= 2 ? STAGES.DESCRIPTION : STAGES.IDENTITY;
+    return exchangeCount >= 1 ? STAGES.DESCRIPTION : STAGES.IDENTITY;
   }
   if (currentStage === STAGES.DESCRIPTION)     return STAGES.EXPERIENCE;
   if (currentStage === STAGES.EXPERIENCE)      return STAGES.OPINION_REASON;
-  if (currentStage === STAGES.OPINION_REASON)  return STAGES.THREAD_FOLLOWUP;
+
+  // OPINION_REASON: move on after MAX_OPINION_EXCHANGES even if no reasoning produced.
+  // A candidate who gives opinions without reasons after 2 attempts can't do B1.
+  if (currentStage === STAGES.OPINION_REASON) {
+    return (analysis.hasReason || stageExchangeCount >= MAX_OPINION_EXCHANGES)
+      ? STAGES.THREAD_FOLLOWUP
+      : STAGES.OPINION_REASON;
+  }
+
   if (currentStage === STAGES.THREAD_FOLLOWUP) return STAGES.MISINTERPRET;
 
   return STAGES.MISINTERPRET;
@@ -170,19 +218,11 @@ function buildStageInstruction(
           "Do not ask anything else. Add <ceiling>false</ceiling>."
         );
       }
-      if (exchangeCount === 1) {
-        return (
-          "\n\nSTAGE: IDENTITY — Exchange 1.\n" +
-          "Ask ONE question only: where they are from or where they live.\n" +
-          "Vary the wording naturally. Keep it under 8 words.\n" +
-          "Add <ceiling>false</ceiling>."
-        );
-      }
       return (
-        "\n\nSTAGE: IDENTITY — Exchange 2 (final identity question).\n" +
-        "Ask ONE question only: what do they do — work or study.\n" +
-        "Vary the wording naturally. Keep it under 10 words.\n" +
-        "Add <ceiling>false</ceiling>."
+        "\n\nSTAGE: IDENTITY — Exchange 1 (final identity question).\n" +
+        "Ask TWO short things in one natural sentence: where they are from, and what they do (work or study).\n" +
+        "Use simple words. Example: 'Where are you from, and do you work or study?'\n" +
+        "Keep it under 12 words. Add <ceiling>false</ceiling>."
       );
 
     case STAGES.DESCRIPTION:
@@ -200,27 +240,50 @@ function buildStageInstruction(
         "Add <ceiling>false</ceiling>."
       );
 
-    case STAGES.EXPERIENCE:
+    case STAGES.EXPERIENCE: {
+      const demandGuide: Record<string, string> = {
+        narrative: "Ask them to tell you a story connected to this topic — what happened, when, where.\n" +
+          "The question must require past or future tense.\n" +
+          "Examples: 'Tell me about a time you...' / 'What happened when...?'",
+        descriptive: "Ask them to describe something connected to this topic — what it looks, feels, or sounds like.\n" +
+          "Push for detail beyond one word. 'What is it like?' / 'Describe it for me.'",
+        comparative: "Ask them to compare two things connected to this topic.\n" +
+          "The question must need more than 'I prefer X'. 'What's the difference between...?'",
+        evaluative: "Ask them to judge or assess something connected to this topic.\n" +
+          "The question must require an opinion. 'Do you think that's good? Why?'",
+        explanatory: "Ask them to explain how or why something works, connected to this topic.\n" +
+          "The question must require a process or reason. 'How does that work?' / 'Why is that?'",
+      };
+      const guide = demandGuide[topic.demand] ?? demandGuide.narrative;
+
       return (
         "\n\nSTAGE: EXPERIENCE — Exchange " + exchangeCount + ".\n" +
         adaptivityRule +
         "Now introduce the session topic: " + topic.label + ".\n" +
-        "Ask about a past event OR a future plan connected to this topic.\n" +
-        "The question must require past or future tense — not just present description.\n" +
-        "Examples: 'Tell me about a time you...' / 'What did you do last...?' / 'What would you like to do next...?'\n" +
+        (topic.openerHint ? "Transition hint: " + topic.openerHint + "\n" : "") +
+        guide + "\n" +
         (analysis.isWeak && struggleCount < 2
-          ? "The candidate's last response was weak. Ask them to give more detail about their experience — do not change topic.\n"
+          ? "The candidate's last response was weak. Ask them to give more detail — do not change topic.\n"
           : "") +
         "Add <ceiling>false</ceiling>."
       );
+    }
 
-    case STAGES.OPINION_REASON:
+    case STAGES.OPINION_REASON: {
+      const opinionGuide: Record<string, string> = {
+        narrative: "Ask them to reflect on the story they told — was it good, bad, would they do it again?",
+        descriptive: "Ask them to evaluate what they described — do they like it, would they change it?",
+        comparative: "Push the comparison further — ask which is better and WHY.",
+        evaluative: "Deepen the evaluation — ask them to justify their position with a reason or example.",
+        explanatory: "Ask whether the thing they explained works well, or could be better.",
+      };
+      const guide = opinionGuide[topic.demand] ?? opinionGuide.evaluative;
+
       return (
         "\n\nSTAGE: OPINION_REASON — Exchange " + exchangeCount + ".\n" +
         adaptivityRule +
-        "Ask a position question about " + topic.label + " that requires justification.\n" +
+        guide + "\n" +
         "The question must demand an opinion AND a reason — not just a preference.\n" +
-        "Examples: 'Do you think [X] is better than [Y]? Why?' / 'Is [X] important? Why or why not?'\n" +
         "Avoid knowledge questions. Keep it experience-based.\n\n" +
         "MANDATORY FOLLOW-UP RULE:\n" +
         "If the candidate gave an opinion in their last message WITHOUT a reason or explanation:\n" +
@@ -232,6 +295,7 @@ function buildStageInstruction(
           : "") +
         "Add <ceiling>false</ceiling>."
       );
+    }
 
     case STAGES.THREAD_FOLLOWUP:
       return (
@@ -277,33 +341,147 @@ function buildStageInstruction(
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PERCEIVED LEVEL TIER
+// Based on how the candidate is performing, pick low / mid / high framing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getPerceivedTier(stage: Stage, struggleCount: number, exchangeCount: number, messages: Message[]): "low" | "mid" | "high" {
+  // Extract candidate messages only (skip the first exchange which is just greeting/name)
+  const candidateMsgs = messages
+    .filter((m) => m.role === "user")
+    .slice(1); // skip name/identity response
+
+  // Not enough data yet — default to low (safe starting point)
+  if (candidateMsgs.length === 0) return "low";
+
+  // ── Linguistic signals from candidate's actual writing ──
+
+  const allText = candidateMsgs.map((m) => m.content).join(" ");
+  const words = allText.split(/\s+/).filter((w) => w.length > 0);
+  const totalWords = words.length;
+
+  // Average words per message
+  const avgWordsPerMsg = totalWords / candidateMsgs.length;
+
+  // Subordinate clause markers (because, although, if, when, while, since, however, though)
+  const subordinatePattern = /\b(because|although|if|when|while|since|however|though|unless|whereas|even though|so that|in order to)\b/gi;
+  const subordinateCount = (allText.match(subordinatePattern) || []).length;
+
+  // Past/future tense signals
+  const pastPattern = /\b(was|were|went|had|did|got|made|came|saw|took|thought|felt|said|told|found|knew|became|left|gave|brought|bought|played|worked|lived|used to)\b/gi;
+  const futurePattern = /\b(will|would|going to|plan to|hope to|want to|might|could)\b/gi;
+  const pastCount = (allText.match(pastPattern) || []).length;
+  const futureCount = (allText.match(futurePattern) || []).length;
+  const tenseRange = (pastCount > 0 ? 1 : 0) + (futureCount > 0 ? 1 : 0);
+
+  // Unique words / total words (lexical diversity — rough type-token ratio)
+  const uniqueWords = new Set(words.map((w) => w.toLowerCase().replace(/[^a-z']/g, ""))).size;
+  const lexicalDiversity = totalWords > 0 ? uniqueWords / totalWords : 0;
+
+  // Sentence complexity: look for commas inside messages (suggests compound/complex sentences)
+  const commaCount = (allText.match(/,/g) || []).length;
+
+  // ── Score the signals ──
+  // Each signal contributes to a 0-10 score, then we bucket into tiers
+
+  let score = 0;
+
+  // Message length (0-2 points)
+  if (avgWordsPerMsg >= 15) score += 2;
+  else if (avgWordsPerMsg >= 8) score += 1;
+
+  // Subordinate clauses (0-2 points)
+  if (subordinateCount >= 3) score += 2;
+  else if (subordinateCount >= 1) score += 1;
+
+  // Tense range (0-2 points)
+  score += tenseRange;
+
+  // Lexical diversity (0-2 points) — only meaningful with enough words
+  if (totalWords >= 15) {
+    if (lexicalDiversity >= 0.7) score += 2;
+    else if (lexicalDiversity >= 0.5) score += 1;
+  }
+
+  // Sentence complexity via commas (0-1 point)
+  if (commaCount >= 2) score += 1;
+
+  // Struggle penalty (override signal)
+  if (struggleCount >= 2) score = Math.min(score, 2);
+
+  // ── Bucket into tiers ──
+  if (score <= 3) return "low";
+  if (score >= 7) return "high";
+  return "mid";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BUILD CONVERSATION PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildConversationPrompt(topic: Topic): string {
+function buildConversationPrompt(topic: Topic, perceivedTier: "low" | "mid" | "high"): string {
+  const tierGuidance = topic.tierPrompts
+    ? topic.tierPrompts[perceivedTier]
+    : topic.seedPrompt;
+
+  const languageLevelBlock = {
+    low:
+      `═══ YOUR LANGUAGE LEVEL ═══
+
+You are talking to a BEGINNER (Pre-A1 to A2). Adjust YOUR language:
+- Use only common, short words (go, like, have, want, good, bad, big, small)
+- Keep sentences under 10 words
+- No idioms, no phrasal verbs, no abstract words
+- Use present tense in your questions where possible
+- One simple question per turn — never compound questions
+- Examples of GOOD examiner language at this level:
+  "What do you like to eat?" / "Tell me about your home." / "Do you like your job?"
+- Examples of BAD examiner language at this level:
+  "What aspects of your daily routine do you find most fulfilling?"
+  "Could you elaborate on that?"
+  "Tell me something you like about your city." (too many parts)`,
+
+    mid:
+      `═══ YOUR LANGUAGE LEVEL ═══
+
+You are talking to an INTERMEDIATE candidate (A2+ to B1). Adjust YOUR language:
+- Use everyday vocabulary — avoid academic or formal words
+- Keep sentences under 15 words
+- Simple phrasal verbs are OK (find out, look for, get on with)
+- You can use past and future tense in questions
+- "Why" and "how" questions are fine, but keep them focused
+- Examples of GOOD examiner language at this level:
+  "Why do you like that?" / "What happened when you got there?" / "How do you feel about that?"
+- Examples of BAD examiner language at this level:
+  "To what extent do you think that's influenced by socioeconomic factors?"`,
+
+    high:
+      `═══ YOUR LANGUAGE LEVEL ═══
+
+You are talking to an UPPER-INTERMEDIATE or ADVANCED candidate (B1+ to B2+). You can:
+- Use a wider range of vocabulary including some abstract words
+- Ask comparative and hypothetical questions
+- Use conditionals ("If you could...", "What would you...")
+- Push for reasoning, evaluation, and nuance
+- Still keep it natural — this is a chat, not an essay prompt`,
+  }[perceivedTier];
+
   return `You are an AI examiner for the FEAT Writing Test — Task 1: ${WRITING_TASK1.meta.title}.
 
 THIS IS A WRITTEN TEST. The candidate is TYPING responses in a WhatsApp-style chat. There is NO audio.
 
-YOUR GOAL: Elicit CEFR writing evidence across six structured stages. Each stage targets specific macros. You still sound natural — but you follow the stage instruction precisely.
+YOUR GOAL: Elicit CEFR writing evidence through structured conversation. You follow the stage instruction precisely while sounding natural.
 
 ═══ SESSION TOPIC ═══
 
 Today's topic: ${topic.label}
-${topic.seedPrompt}
+${tierGuidance}
 
-Do NOT name the topic explicitly until the EXPERIENCE stage. Let it emerge naturally.
+Do NOT name the topic explicitly until instructed. Let it emerge naturally.
 
-═══ SIX STAGES ═══
+The route controls which stage you are in and when you move. You do not decide stage transitions. Stay in the current stage until the next exchange.
 
-IDENTITY        → Pre-A1/A1  — name, location, job
-DESCRIPTION     → A1/A2      — describe a familiar entity with detail
-EXPERIENCE      → A2+        — past event or future plan (introduces topic)
-OPINION_REASON  → B1         — position + justification
-THREAD_FOLLOWUP → B1+        — reference earlier content, connect ideas
-MISINTERPRET    → B2+        — deliberately misread candidate, prompt repair
-
-The route controls which stage you are in. Stay in the current stage until the next exchange.
+${languageLevelBlock}
 
 ═══ HARD RULES ═══
 
@@ -316,6 +494,7 @@ The route controls which stage you are in. Stay in the current stage until the n
 7. Misinterpretation must be mild — not confusing or absurd.
 8. Avoid knowledge questions. Keep prompts experience-based.
 9. Write like a natural text chat — concise and warm.
+10. Match your language to the candidate's level (see YOUR LANGUAGE LEVEL above).
 
 ═══ WHAT YOU ARE ASSESSING ═══
 
@@ -373,8 +552,16 @@ Task 1 tests two functions:
 - INTERACTIONAL: Can the candidate manage a written exchange? (respond, clarify, engage)
 - INFORMING: Can the candidate convey information in writing? (describe, recount, explain)
 
-The conversation progressed through structured stages:
-IDENTITY → DESCRIPTION → EXPERIENCE → OPINION_REASON → THREAD_FOLLOWUP → MISINTERPRET
+The conversation progressed through structured stages. The transcript is annotated with stage headers (e.g. "--- EXPERIENCE ---") so you can see which stage each exchange belonged to:
+
+- IDENTITY: greeting, name, background (low demand — mainly interactional)
+- DESCRIPTION: describing familiar things (tests basic informing)
+- EXPERIENCE: recounting past events or future plans (tests past/future tense informing)
+- OPINION_REASON: giving and justifying opinions (tests higher-order informing + reasoning)
+- THREAD_FOLLOWUP: responding to cross-references from earlier (tests coherence + interaction)
+- MISINTERPRET: correcting a deliberate misreading (tests clarification + repair)
+
+Weight evidence by stage — e.g. past tense in EXPERIENCE is more diagnostic than past tense in IDENTITY. A function demonstrated under appropriate demand (the right stage) is stronger evidence than incidental use elsewhere.
 
 The topic is irrelevant to scoring — assess FUNCTION, not content.
 
@@ -424,45 +611,10 @@ Respond ONLY with valid JSON, no other text:
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LANGUAGE ANALYSIS PROMPT
+// LANGUAGE ANALYSIS PROMPT (uses shared rubric)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const languageAnalysisPrompt = `You are a CEFR-trained language analyst. You have observed a candidate's written responses in a diagnostic text chat.
-
-Your task: Analyse the candidate's messages for language quality across five dimensions. Ignore the AI examiner's messages entirely.
-
-═══ CONTEXT ═══
-
-WhatsApp-style written chat. Candidate typed naturally. Assess language produced — not what they were asked.
-
-═══ DIMENSIONS ═══
-
-For each dimension:
-- Estimated CEFR band (Pre-A1, A1, A2, A2+, B1, B1+, B2, B2+, C1, C2)
-- Short descriptor (1 sentence)
-- 1-2 specific examples from the transcript
-
-1. GRAMMAR (Range & Accuracy)
-2. VOCABULARY (Range & Precision)
-3. COHERENCE & COHESION
-4. SPELLING & MECHANICS
-5. COMMUNICATIVE EFFECTIVENESS
-
-═══ OUTPUT FORMAT ═══
-
-Respond ONLY with valid JSON, no other text:
-{
-  "overallFormLevel": "A2",
-  "overallFormSummary": "Brief 2-sentence summary",
-  "dimensions": [
-    {
-      "dimension": "Grammar",
-      "level": "A2",
-      "descriptor": "One sentence description",
-      "examples": ["example 1", "example 2"]
-    }
-  ]
-}`;
+const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -498,19 +650,43 @@ export async function POST(req: NextRequest) {
       topic: topicFromClient,
       stage: stageFromClient,
       struggleCount: struggleFromClient,
+      stageExchangeCount: stageExchangeFromClient,
+      probeRound,
+      probeTargets: probeTargetsFromClient,
+      probeExchangeCount,
+      elicitationRound,
+      elicitationTargets: elicitationTargetsFromClient,
+      elicitationExchangeCount,
     } = await req.json();
 
     const topic: Topic = topicFromClient ?? pickRandomTopic();
     const currentStage: Stage = (stageFromClient ?? STAGES.IDENTITY) as Stage;
 
-    // Struggle count is tracked by the frontend and sent each turn
+    // Struggle count and stage exchange count tracked by frontend, sent each turn
     const currentStruggleCount: number = struggleFromClient ?? 0;
+    const currentStageExchangeCount: number = stageExchangeFromClient ?? 0;
 
 
     // ── Diagnosis ──────────────────────────────────────────────────────────
     if (action === "diagnose") {
+      const STAGE_LABELS: Record<number, string> = {
+        0: "IDENTITY", 1: "DESCRIPTION", 2: "EXPERIENCE",
+        3: "OPINION_REASON", 4: "THREAD_FOLLOWUP", 5: "MISINTERPRET",
+      };
+      let lastStageLabel = "";
       const transcript = messages
-        .map((m: Message) => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`)
+        .map((m: Message) => {
+          const speaker = m.role === "assistant" ? "AI" : "Candidate";
+          // Insert stage header when stage changes (stage is tagged on messages by frontend)
+          const msgStage = m.stage;
+          const stageLabel = msgStage !== undefined ? STAGE_LABELS[msgStage] ?? `STAGE_${msgStage}` : "";
+          let prefix = "";
+          if (stageLabel && stageLabel !== lastStageLabel) {
+            prefix = `\n--- ${stageLabel} ---\n`;
+            lastStageLabel = stageLabel;
+          }
+          return `${prefix}${speaker}: ${m.content}`;
+        })
         .join("\n");
 
       const candidateOnly = messages
@@ -630,13 +806,92 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        return NextResponse.json({ diagnosis, formAnalysis });
+        // Build macro lookup for elicitation (maps azeId → probeGuidance)
+        const macroLookup = new Map(
+          WRITING_TASK1.azeMacro.map(m => [m.azeId, { probeGuidance: m.probeGuidance }])
+        );
+
+        // Identify MEDIUM-confidence macros for potential probing
+        const probeTargets = probeRound
+          ? [] // Already probed — no further probing
+          : identifyProbeTargets(diagnosis.results, WRITING_TASK1.levelClusters, calculatedLevel);
+
+        // Identify NOT_DEMONSTRATED macros at boundary for elicitation
+        // Only after probing is done (or skipped), and not if we already elicited
+        const elicitationTargets = (!elicitationRound && (probeRound || probeTargets.length === 0))
+          ? identifyElicitationTargets(diagnosis.results, WRITING_TASK1.levelClusters, calculatedLevel, macroLookup)
+          : [];
+
+        return NextResponse.json({ diagnosis, formAnalysis, probeTargets, elicitationTargets });
       } catch {
         return NextResponse.json(
           { error: "Failed to parse diagnosis", raw: judgeARaw },
           { status: 500 }
         );
       }
+    }
+
+
+    // ── Probe conversation turn ─────────────────────────────────────────
+    if (action === "probe") {
+      const pExCount = typeof probeExchangeCount === "number" ? probeExchangeCount : 0;
+      const targets = probeTargetsFromClient || [];
+
+      // Build signals map so probe questions are targeted (Task 1 uses probeGuidance)
+      const signalsMap = new Map<string, string[]>();
+      for (const macro of WRITING_TASK1.azeMacro) {
+        signalsMap.set(macro.azeId, macro.probeGuidance);
+      }
+
+      const probeSystemPrompt = buildProbePrompt(
+        targets,
+        `Task: ${WRITING_TASK1.meta.title}. This is a conversation-based writing assessment about "${topic?.label || "a topic"}."`  ,
+        signalsMap
+      );
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: probeSystemPrompt },
+          ...(messages || []),
+        ],
+        max_tokens: 150,
+      });
+
+      const rawMessage = response.choices[0].message.content || "";
+      const probeDoneMatch = rawMessage.match(/<probe_done>(true|false)<\/probe_done>/);
+      const probeDone = (probeDoneMatch && probeDoneMatch[1] === "true") || pExCount >= MAX_PROBE_EXCHANGES - 1;
+      const aiMessage = rawMessage.replace(/<probe_done>(true|false)<\/probe_done>/g, "").trim();
+
+      return NextResponse.json({ message: aiMessage, probeDone });
+    }
+
+
+    // ── Elicitation conversation turn ──────────────────────────────────────
+    if (action === "elicit") {
+      const eExCount = typeof elicitationExchangeCount === "number" ? elicitationExchangeCount : 0;
+      const targets: ElicitationTarget[] = elicitationTargetsFromClient || [];
+
+      const elicitSystemPrompt = buildElicitationPrompt(
+        targets,
+        `Task: ${WRITING_TASK1.meta.title}. This is a conversation-based writing assessment about "${topic?.label || "a topic"}."`
+      );
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: elicitSystemPrompt },
+          ...(messages || []),
+        ],
+        max_tokens: 150,
+      });
+
+      const rawMessage = response.choices[0].message.content || "";
+      const doneMatch = rawMessage.match(/<probe_done>(true|false)<\/probe_done>/);
+      const elicitDone = (doneMatch && doneMatch[1] === "true") || eExCount >= MAX_ELICITATION_EXCHANGES - 1;
+      const aiMessage = rawMessage.replace(/<probe_done>(true|false)<\/probe_done>/g, "").trim();
+
+      return NextResponse.json({ message: aiMessage, elicitDone });
     }
 
 
@@ -665,7 +920,8 @@ export async function POST(req: NextRequest) {
     const targetFunction = getTargetFunction(currentStage);
 
     // Build prompt
-    const conversationPrompt = buildConversationPrompt(topic);
+    const perceivedTier = getPerceivedTier(currentStage, updatedStruggleCount, exchangeCount, messages);
+    const conversationPrompt = buildConversationPrompt(topic, perceivedTier);
 
     let stageInstruction: string;
 
@@ -707,7 +963,11 @@ export async function POST(req: NextRequest) {
     // Next stage computed entirely in route
     const nextStage: Stage = wrapUp
       ? currentStage
-      : computeNextStage(currentStage, exchangeCount, analysis, updatedStruggleCount);
+      : computeNextStage(currentStage, exchangeCount, analysis, updatedStruggleCount, currentStageExchangeCount);
+
+    // Track how many exchanges we've spent in the current stage
+    // Resets to 0 when stage changes, increments when staying
+    const nextStageExchangeCount = nextStage !== currentStage ? 0 : currentStageExchangeCount + 1;
 
     // Clean message
     const aiMessage = rawMessage
@@ -719,6 +979,7 @@ export async function POST(req: NextRequest) {
       ceilingReached,
       stage: nextStage,
       struggleCount: updatedStruggleCount,
+      stageExchangeCount: nextStageExchangeCount,
       targetFunction,
       topic,
     });

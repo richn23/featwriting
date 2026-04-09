@@ -61,6 +61,16 @@ export interface LevelCluster {
 export interface Topic {
   label: string;
   seedPrompt: string;
+  /** Tiered prompts: the route picks one based on perceived candidate level */
+  tierPrompts?: {
+    low: string;   // Pre-A1 to A2: simple, concrete, personal
+    mid: string;   // B1: familiar but requires some explanation
+    high: string;  // B2+: abstract, comparative, requires reasoning
+  };
+  /** Primary communicative demand this topic naturally elicits */
+  demand: "narrative" | "descriptive" | "comparative" | "evaluative" | "explanatory";
+  /** Opener hint — how the examiner should transition into this topic from IDENTITY */
+  openerHint: string;
 }
 
 export interface WritingTask1Config {
@@ -493,25 +503,243 @@ const levelClusters: LevelCluster[] = [
 // ═════════════════════════════════════════════════════════════════════════════
 
 const topics: Topic[] = [
+
+  // ── NARRATIVE demand: get them telling a story ──
+
   {
-    label: "hobbies and free time",
-    seedPrompt: "Use this theme to ask about what they do in their free time, a hobby, or something they enjoy.",
+    label: "a trip or journey",
+    seedPrompt: "Get them to tell you about a trip they took — where, when, what happened.",
+    demand: "narrative",
+    openerHint: "Connect from where they're from — ask if they've been anywhere interesting recently.",
+    tierPrompts: {
+      low: "Ask about a simple trip — maybe to a shop, a friend's house, or a nearby town. 'Did you go anywhere last weekend?'",
+      mid: "Ask about a holiday or a journey that was memorable. 'Tell me about a trip you took — what happened?'",
+      high: "Ask about a journey that changed their perspective or didn't go as planned. 'Tell me about a trip that surprised you.'",
+    },
   },
   {
-    label: "work or study",
-    seedPrompt: "Use this theme to ask about their job, studies, or daily routine.",
+    label: "something that went wrong",
+    seedPrompt: "Get them to recount a problem or mishap — what happened and how they dealt with it.",
+    demand: "narrative",
+    openerHint: "After learning about their life, ask about a time something didn't go to plan.",
+    tierPrompts: {
+      low: "Ask about a small problem — losing something, being late. 'Did something go wrong this week?'",
+      mid: "Ask about a time things didn't go as expected. 'Tell me about a time something went wrong — what did you do?'",
+      high: "Ask about a mistake they learned from or a situation that was hard to handle. 'Has something ever gone wrong that turned out to be a good thing?'",
+    },
   },
   {
-    label: "travel and places",
-    seedPrompt: "Use this theme to ask about places they have been, want to go, or like.",
+    label: "a celebration or special day",
+    seedPrompt: "Get them to describe a celebration — birthday, wedding, holiday, festival.",
+    demand: "narrative",
+    openerHint: "Ask naturally from what they told you — maybe a recent birthday or holiday.",
+    tierPrompts: {
+      low: "Ask about their last birthday or a holiday they celebrate. 'What did you do on your birthday?'",
+      mid: "Ask about a celebration that was important to them. 'Tell me about a special day you remember.'",
+      high: "Ask about how celebrations differ across cultures or have changed over time. 'How do people where you're from celebrate important events?'",
+    },
+  },
+
+  // ── DESCRIPTIVE demand: get them painting a picture ──
+
+  {
+    label: "where they live",
+    seedPrompt: "Get them to describe their home, street, or neighbourhood — what it looks like, what's nearby.",
+    demand: "descriptive",
+    openerHint: "They already told you where they're from — now ask what it's actually like there.",
+    tierPrompts: {
+      low: "Ask what is near their home. 'What is near your house? Is there a shop or park?'",
+      mid: "Ask them to describe their neighbourhood — what they see, what they like. 'What does your street look like?'",
+      high: "Ask how the area has changed, or what makes it different from other places. 'How has your neighbourhood changed since you moved there?'",
+    },
   },
   {
-    label: "family and friends",
-    seedPrompt: "Use this theme to ask about people in their life, what they do together, or how they stay in touch.",
+    label: "a person they know well",
+    seedPrompt: "Get them to describe someone — appearance, personality, what they do together.",
+    demand: "descriptive",
+    openerHint: "Ask about someone they mentioned or someone important to them.",
+    tierPrompts: {
+      low: "Ask about a family member or friend. 'Tell me about your best friend.' or 'Who is in your family?'",
+      mid: "Ask them to describe someone they admire or spend a lot of time with. 'What are they like as a person?'",
+      high: "Ask what makes that person different from others, or how the relationship has developed. 'What do you think makes someone a good friend?'",
+    },
   },
   {
-    label: "food and cooking",
-    seedPrompt: "Use this theme to ask about what they like to eat, cook, or try.",
+    label: "their typical day",
+    seedPrompt: "Get them to walk you through a normal day — morning to evening.",
+    demand: "descriptive",
+    openerHint: "Connect from their work/study answer — ask what a normal day looks like.",
+    tierPrompts: {
+      low: "Ask what they do in the morning or after school/work. 'What do you do every day?'",
+      mid: "Ask them to describe a typical day from start to finish. 'Walk me through your day — what happens?'",
+      high: "Ask how their routine has changed, or whether they like routine or variety. 'Is your daily routine different now from a few years ago?'",
+    },
+  },
+  {
+    label: "a favourite place",
+    seedPrompt: "Get them to describe a place they enjoy — a cafe, a park, a beach, a room.",
+    demand: "descriptive",
+    openerHint: "Ask about a place that makes them happy or that they go to often.",
+    tierPrompts: {
+      low: "Ask about a place they like. 'Do you have a favourite place? What is it like?'",
+      mid: "Ask them to describe the place in detail — what you'd see, hear, feel. 'What makes that place special to you?'",
+      high: "Ask why certain places feel important or what a place says about a person. 'Why do you think people get attached to certain places?'",
+    },
+  },
+
+  // ── COMPARATIVE demand: get them weighing two things ──
+
+  {
+    label: "city life vs country life",
+    seedPrompt: "Get them to compare living in a city with living in the countryside.",
+    demand: "comparative",
+    openerHint: "From where they live, ask whether they prefer city or quiet areas.",
+    tierPrompts: {
+      low: "Ask simple preference. 'Do you like living in a big city or a small town?'",
+      mid: "Ask them to compare the two. 'What is better about living in a city? And the countryside?'",
+      high: "Ask about trade-offs, quality of life, or what matters most in where you live. 'What would you choose if you could live anywhere — and why?'",
+    },
+  },
+  {
+    label: "now vs when they were younger",
+    seedPrompt: "Get them to compare their life now with their life when they were younger.",
+    demand: "comparative",
+    openerHint: "Ask if things are different now compared to when they were at school.",
+    tierPrompts: {
+      low: "Ask a simple then-vs-now question. 'What was different when you were a child?'",
+      mid: "Ask them to compare their life now with 5-10 years ago. 'How is your life different from when you were younger?'",
+      high: "Ask about what has improved and what hasn't, or whether change is always good. 'Do you think your life is better now than when you were younger? In what ways?'",
+    },
+  },
+
+  // ── EVALUATIVE demand: get them judging and justifying ──
+
+  {
+    label: "something they would change",
+    seedPrompt: "Get them to identify something they'd change about their life, town, or country — and explain why.",
+    demand: "evaluative",
+    openerHint: "From what they've described, ask if there's anything they'd change.",
+    tierPrompts: {
+      low: "Ask one simple thing they'd change. 'Is there something you don't like about your town?'",
+      mid: "Ask what they would change and why. 'If you could change one thing about where you live, what would it be?'",
+      high: "Ask about change at a bigger scale. 'What's one thing you think should be different about how people live today?'",
+    },
+  },
+  {
+    label: "a decision they made",
+    seedPrompt: "Get them to talk about a choice — what they decided, why, and whether it was right.",
+    demand: "evaluative",
+    openerHint: "Ask about a choice they faced recently — big or small.",
+    tierPrompts: {
+      low: "Ask about a simple choice. 'What did you choose to eat today? Why?' or 'Do you like your job — or do you want a different one?'",
+      mid: "Ask about a decision and their reasoning. 'Tell me about a choice you made recently — was it the right one?'",
+      high: "Ask about a difficult decision with trade-offs. 'What's the hardest decision you've had to make? What made it hard?'",
+    },
+  },
+  {
+    label: "what makes a good job",
+    seedPrompt: "Get them to evaluate what matters in work — money, people, location, interest.",
+    demand: "evaluative",
+    openerHint: "From their work/study answer, ask what they think matters most in a job.",
+    tierPrompts: {
+      low: "Ask what they like about work. 'Do you like your job? Why?' or 'What is a good job?'",
+      mid: "Ask them to weigh factors. 'What is more important in a job — the money or the people?'",
+      high: "Ask about work values in a broader sense. 'Do you think people today care more about money or job satisfaction?'",
+    },
+  },
+
+  // ── EXPLANATORY demand: get them explaining how or why ──
+
+  {
+    label: "how they learned something",
+    seedPrompt: "Get them to explain how they picked up a skill — cooking, driving, a language, a sport.",
+    demand: "explanatory",
+    openerHint: "Ask about a skill they have and how they learned it.",
+    tierPrompts: {
+      low: "Ask about something they can do. 'Can you cook? Who showed you?' or 'Can you drive?'",
+      mid: "Ask them to explain the process. 'How did you learn to do that? Was it difficult?'",
+      high: "Ask about learning methods and what works best for them. 'Do you learn better by doing or by reading? Why do you think that is?'",
+    },
+  },
+  {
+    label: "why they like something",
+    seedPrompt: "Get them to explain their preference — a food, a hobby, a type of music, a place.",
+    demand: "explanatory",
+    openerHint: "Pick up on something they mentioned enjoying and ask why.",
+    tierPrompts: {
+      low: "Ask why they like something simple. 'You said you like football — why do you like it?'",
+      mid: "Push for reasons beyond 'it's nice'. 'What is it about that thing that you enjoy? Can you explain?'",
+      high: "Ask about the deeper reasons. 'Why do you think some things stay important to us while others don't?'",
+    },
+  },
+  {
+    label: "how something works where they live",
+    seedPrompt: "Get them to explain a system or custom from their context — transport, school, shopping, a tradition.",
+    demand: "explanatory",
+    openerHint: "Ask how something everyday works where they're from.",
+    tierPrompts: {
+      low: "Ask about something concrete. 'How do you get to work?' or 'Where do people buy food in your town?'",
+      mid: "Ask them to explain a system. 'How does public transport work where you live?' or 'How do people usually find a flat?'",
+      high: "Ask them to explain and evaluate. 'How does the education system work where you're from — do you think it works well?'",
+    },
+  },
+  {
+    label: "phones and daily life",
+    seedPrompt: "Get them to explain how they use their phone and what role it plays in their day.",
+    demand: "explanatory",
+    openerHint: "Ask naturally — most people use phones constantly, easy to bring up.",
+    tierPrompts: {
+      low: "Ask what they use their phone for. 'What do you do on your phone?'",
+      mid: "Ask them to explain the role it plays. 'Could you live without your phone for a week? Why / why not?'",
+      high: "Ask them to explain the broader impact. 'How do you think phones have changed the way people communicate?'",
+    },
+  },
+
+  // ── MIXED demand: topics that naturally combine multiple types ──
+
+  {
+    label: "food and meals",
+    seedPrompt: "Start with what they eat, then explore cooking, meals with others, food culture.",
+    demand: "descriptive",
+    openerHint: "Easy to bring up from daily routine — ask about lunch or dinner.",
+    tierPrompts: {
+      low: "Ask what they eat. 'What do you usually have for lunch?'",
+      mid: "Ask about a meal or cooking experience. 'Do you ever cook for other people? Tell me about it.'",
+      high: "Ask about food culture. 'How important is food in your culture? Has the way people eat changed?'",
+    },
+  },
+  {
+    label: "weekends",
+    seedPrompt: "Get them talking about what they do at the weekend — routine or special activities.",
+    demand: "narrative",
+    openerHint: "Natural follow-up from daily routine or work questions.",
+    tierPrompts: {
+      low: "Ask what they did last weekend. 'What did you do at the weekend?'",
+      mid: "Ask about a typical vs special weekend. 'What's a good weekend for you?'",
+      high: "Ask about work-life balance or how weekends have changed. 'Do you think people need more free time? Why?'",
+    },
+  },
+  {
+    label: "animals and pets",
+    seedPrompt: "Get them talking about pets, animals, or their feelings about animals.",
+    demand: "descriptive",
+    openerHint: "Ask if they have any pets or like animals.",
+    tierPrompts: {
+      low: "Ask if they have a pet or like animals. 'Do you have a pet? What is it like?'",
+      mid: "Ask about their experience with animals. 'Tell me about a pet you had — or an animal you like.'",
+      high: "Ask about the role of animals in society. 'Do you think keeping pets is always good for the animals?'",
+    },
+  },
+  {
+    label: "something new they tried",
+    seedPrompt: "Get them to tell you about a time they tried something new — food, activity, place, job.",
+    demand: "narrative",
+    openerHint: "Ask about a recent first experience.",
+    tierPrompts: {
+      low: "Ask about something simple and new. 'Did you try anything new this week?'",
+      mid: "Ask about a more memorable first time. 'Tell me about a time you tried something for the first time.'",
+      high: "Ask about risk and novelty. 'Do you think it's important to try new things? What makes people afraid to?'",
+    },
   },
 ];
 
