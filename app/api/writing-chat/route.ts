@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { WRITING_TASK1, Topic } from "../../writing/writing-descriptors";
+import { supabase } from "../../lib/supabase";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -583,6 +584,22 @@ export async function POST(req: NextRequest) {
           formAnalysis = JSON.parse(formCleaned);
         } catch {
           console.error("Failed to parse form analysis:", formCleaned);
+        }
+
+        // ── Save result to Supabase ────────────────────────────────────
+        try {
+          await supabase.from("test_results").insert({
+            candidate_name: null,          // can be passed from frontend later
+            task: "task1",
+            diagnosed_level: diagnosis.diagnosedLevel,
+            score_10: diagnosis.score,
+            functional_report: diagnosis,
+            form_report: formAnalysis,
+            transcript,
+          });
+        } catch (saveErr) {
+          console.error("Failed to save result to Supabase:", saveErr);
+          // Don't block the response — diagnosis still returns even if save fails
         }
 
         return NextResponse.json({ diagnosis, formAnalysis });

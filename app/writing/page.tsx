@@ -637,13 +637,13 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .debate-accent .chat-send-btn { background:var(--coral) !important }
 .challenge-page { min-height:100vh; padding:40px 20px 80px; background:radial-gradient(ellipse at 50% 20%,rgba(167,139,250,.08) 0%,transparent 50%),var(--s-bg) }
 .challenge-header { text-align:center; max-width:640px; margin:0 auto 32px }
-.challenge-header h2 { font-family:'DM Serif Display',serif; font-size:1.6rem; font-weight:400; color:var(--ink) }
-.challenge-header p { font-size:.85rem; color:var(--muted); margin-top:6px }
+.challenge-header h2 { font-family:'DM Serif Display',serif; font-size:1.6rem; font-weight:400; color:rgba(255,255,255,.9) }
+.challenge-header p { font-size:.85rem; color:rgba(255,255,255,.55); margin-top:6px }
 .challenge-progress { display:flex; gap:8px; justify-content:center; margin-top:16px }
 .challenge-dot { width:10px; height:10px; border-radius:50%; background:rgba(0,0,0,.08); transition:all .3s ease }
 .challenge-dot.active { background:#7c3aed; transform:scale(1.3) }
 .challenge-dot.done { background:#a78bfa }
-.challenge-card { max-width:640px; margin:0 auto; background:var(--glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--glass-border); border-radius:20px; box-shadow:var(--shadow-lg); overflow:hidden; animation:fadeUp .4s ease forwards }
+.challenge-card { max-width:640px; margin:0 auto; background:var(--glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--glass-border); border-radius:20px; box-shadow:var(--shadow-lg); overflow:visible; animation:fadeUp .4s ease forwards }
 .challenge-type-tag { display:inline-flex; align-items:center; gap:6px; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; padding:5px 12px; border-radius:12px; margin-bottom:12px }
 .challenge-type-tag.simplify { background:rgba(16,185,129,.1); color:#059669 }
 .challenge-type-tag.formalise { background:rgba(59,130,246,.1); color:#2563eb }
@@ -659,7 +659,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .challenge-textarea { width:100%; min-height:120px; max-height:400px; padding:16px; font-family:'DM Sans',sans-serif; font-size:.9rem; line-height:1.7; color:var(--ink); background:rgba(0,0,0,.02); border:1px solid rgba(0,0,0,.06); border-radius:12px; outline:none; resize:none; overflow-y:auto; transition:border-color .2s ease; field-sizing:content }
 .challenge-textarea:focus { border-color:#7c3aed }
 .challenge-textarea::placeholder { color:#9ca3af }
-.challenge-nav { display:flex; justify-content:space-between; padding:0 28px 24px }
+.challenge-nav { display:flex; justify-content:space-between; padding:0 28px 28px }
 .challenge-nav-btn { padding:10px 20px; font-family:'DM Sans',sans-serif; font-size:.85rem; font-weight:600; border:none; border-radius:12px; cursor:pointer; transition:all .2s ease }
 .challenge-nav-btn.secondary { background:rgba(0,0,0,.05); color:var(--ink) }
 .challenge-nav-btn.secondary:hover { background:rgba(0,0,0,.08) }
@@ -1167,8 +1167,31 @@ const getTask5LearnerCapabilitySections = (diagnosedLevel: string): LearnerCapab
   ];
 };
 
-const getLearnerCapabilitySections = (taskNum: number, diagnosedLevel: string): LearnerCapabilitySection[] | null => {
+/**
+ * Build "What you can do" from actual CONFIRMED diagnosis macros when available.
+ * Falls back to the fixed level-based lookup tables when diagnosis has no results.
+ */
+const getLearnerCapabilitySections = (taskNum: number, diagnosedLevel: string, diagnosis?: Diagnosis | null): LearnerCapabilitySection[] | null => {
   if (diagnosedLevel === "—") return null;
+
+  // ── Try actual diagnosis results first ──
+  const confirmed = diagnosis?.results?.filter(r => r.result === "CONFIRMED") ?? [];
+  if (confirmed.length > 0) {
+    // Group confirmed macros by their function label (e.g. "Interactional", "Informing")
+    const byFn = new Map<string, string[]>();
+    for (const r of confirmed) {
+      const fn = r.fn || "General";
+      if (!byFn.has(fn)) byFn.set(fn, []);
+      byFn.get(fn)!.push(r.claim);
+    }
+    const sections: LearnerCapabilitySection[] = [];
+    for (const [fn, claims] of byFn) {
+      sections.push({ title: fn, lines: claims });
+    }
+    if (sections.length > 0) return sections;
+  }
+
+  // ── Fallback: fixed level-based tables ──
   const fb1 = T1_LEARNER_CAPS_BY_LEVEL.B1!;
   const fb3 = T3_LEARNER_CAPS_BY_LEVEL.B1!;
   switch (taskNum) {
@@ -1694,7 +1717,7 @@ export default function WritingTestPage() {
     const score = fnLevel !== "—" ? levelToScore10(fnLevel) : null;
     const softened = fnLevel !== "—" ? softenLevel(fnLevel) : "—";
     const learnerNextSteps = getLearnerImprovementHints(form, taskNum);
-    const learnerCapabilitySections = getLearnerCapabilitySections(taskNum, fnLevel);
+    const learnerCapabilitySections = getLearnerCapabilitySections(taskNum, fnLevel, diagnosis);
 
     const toggleLevel = (level: string) => {
       setExpanded(prev => { const n = new Set(prev); if (n.has(level)) n.delete(level); else n.add(level); return n; });
@@ -1949,7 +1972,7 @@ export default function WritingTestPage() {
       <section className="landing-hero animate-fade-up">
         <div className="landing-hero-eyebrow">FEAT Writing Test</div>
         <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
-        <p className="landing-hero-anchor">FEAT is a function-based writing assessment.</p>
+        <p className="landing-hero-anchor">Function-based writing assessment.</p>
         <p className="landing-hero-hook">
           FEAT assesses writing through what learners actually do with language — explaining, interacting, and justifying — rather than a single fixed text type.
         </p>
@@ -2300,7 +2323,34 @@ export default function WritingTestPage() {
     </main>
   );
   if (phase === "t3-topic-select") {
-    const familiarTopics = [{ id: "social-media", label: "Social Media" }, { id: "remote-work", label: "Working from Home" }, { id: "city-country", label: "City vs Countryside" }, { id: "travel", label: "Travel & Holidays" }];
+    const allTopics = [
+      { id: "social-media", label: "Social Media" },
+      { id: "remote-work", label: "Working from Home" },
+      { id: "city-country", label: "City vs Countryside" },
+      { id: "travel", label: "Travel & Holidays" },
+      { id: "online-learning", label: "Online Learning" },
+      { id: "climate-change", label: "Climate Change" },
+      { id: "fast-fashion", label: "Fast Fashion" },
+      { id: "public-transport", label: "Public Transport" },
+      { id: "pets", label: "Keeping Pets" },
+      { id: "screen-time", label: "Screen Time" },
+      { id: "sport-schools", label: "Sport in Schools" },
+      { id: "cooking-eating", label: "Cooking vs Eating Out" },
+      { id: "age-driving", label: "Age & Driving" },
+      { id: "uniforms", label: "School Uniforms" },
+      { id: "gap-year", label: "Taking a Gap Year" },
+      { id: "technology-health", label: "Technology & Health" },
+      { id: "volunteering", label: "Volunteering" },
+      { id: "money-happiness", label: "Money & Happiness" },
+      { id: "zoos", label: "Zoos & Animal Parks" },
+      { id: "tourism", label: "Tourism & Local Life" },
+      { id: "advertising", label: "Advertising" },
+      { id: "exams", label: "Exams & Testing" },
+      { id: "sharing-economy", label: "The Sharing Economy" },
+      { id: "neighbourhood", label: "Your Neighbourhood" },
+    ];
+    const shuffled = [...allTopics].sort(() => Math.random() - 0.5);
+    const familiarTopics = shuffled.slice(0, 4);
     return wrap(<main className="topic-page"><div className="topic-frame animate-slide-up"><h2>Pick a Topic</h2><p>Choose the topic you&apos;d like to discuss. The AI will challenge your opinions!</p><div className="topic-grid">{familiarTopics.map((t) => (<button key={t.id} className="topic-btn" onClick={() => startT3(t.id)}>{t.label}</button>))}</div></div></main>);
   }
   if (phase === "t3-conversation") return wrap(<div className="debate-accent">{renderPhoneChat("Debate Partner", "Task 3 · Express & Argue", t3Messages, t3Input, setT3Input, t3Processing, t3DoneRef, sendT3, t3ExchangeCount, t3Config?.meta?.maxExchanges || 14, undefined, () => { void finishT3(t3Messages, t3ExchangeCount); })}</div>);

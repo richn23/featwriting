@@ -132,30 +132,34 @@ Topic: ${topic.label}
 ${topic.scaffoldSeed}
 
 SCAFFOLD RULES:
-1. ONE question per turn. Maximum 2 sentences.
-2. Be warm, friendly, and encouraging. This is NOT a test.
-3. Do NOT assess, challenge, correct, or probe for ceiling.
-4. Stay on topic: ${topic.label}. Do not drift.
-5. Do NOT ask yes/no questions. Ask for a short story, memory, or description.
+1. ONE short sentence per turn — the question itself, nothing else.
+2. Do NOT add warm affirmations before the question. No "That sounds wonderful!", "Great!", "That's interesting!", "How lovely!" etc. Just ask the next question directly.
+3. Plain, neutral, friendly tone — like a form, not a conversation. Minimal words.
+4. Do NOT assess, challenge, correct, or probe for ceiling.
+5. Stay on topic: ${topic.label}. Do not drift.
+6. Do NOT ask yes/no questions. Ask for a short story, memory, or description.
+
+GOOD EXAMPLE: "What did you enjoy most about it?"
+BAD EXAMPLE: "That sounds wonderful! What happened during your birthday celebration that made it special for you?"
 
 QUESTION PROGRESSION — follow this order strictly:
   Exchange 0: Ask about a SPECIFIC experience related to ${topic.label}. Not general — specific.
-  Exchange 1: Ask WHAT HAPPENED during that experience. Follow up on what they said.
-  Exchange 2+: Ask WHY it mattered / was enjoyable / was difficult. Then wrap up warmly.
+  Exchange 1: Ask WHAT HAPPENED during that experience. Reference what they said.
+  Exchange 2+: Ask WHY it mattered / was enjoyable / was difficult.
 
 Do NOT skip this progression. Do NOT ask about general opinions.`;
 
   if (exchangeCount === 0) {
-    return base + `\n\nThis is exchange 0 — the START. Greet ${candidateName || "the candidate"} warmly by name and ask about a specific experience they have had with ${topic.label}. Keep it short and friendly.`;
+    return base + `\n\nThis is exchange 0 — the START. Greet ${candidateName || "the candidate"} by name in a few words, then ask about a specific experience with ${topic.label}. One sentence total.`;
   }
 
   if (isFinal) {
-    return base + `\n\nThis is the FINAL scaffold turn. Wrap up warmly in 1 short sentence. Tell them they are ready to write. Do not ask another question.`;
+    return base + `\n\nThis is the FINAL scaffold turn. One short sentence: tell them they are ready to write. No affirmation. No question.`;
   }
 
   const stageInstruction = exchangeCount === 1
-    ? `Ask a follow-up about WHAT HAPPENED during the experience they mentioned. Reference what they said specifically.`
-    : `Ask WHY it mattered, was enjoyable, or was difficult — or ask them to expand with a specific detail. Reference their earlier response. Keep pressure consistent.`;
+    ? `Ask what happened during the experience they mentioned. One sentence. No affirmation.`
+    : `Ask why it mattered, was enjoyable, or was difficult. One sentence. No affirmation.`;
 
   return base + `\n\nThis is scaffold exchange ${exchangeCount}. ${stageInstruction}`;
 }
