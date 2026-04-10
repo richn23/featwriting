@@ -36,7 +36,7 @@ type MacroResult = {
 
 type LevelResult = { level: string; confirmed: boolean; canCount: number; threshold: string };
 type Diagnosis = { diagnosedLevel: string; levelResults: LevelResult[]; results: MacroResult[] };
-type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[]; levelMeaning?: string; focusNext?: string };
+type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[]; levelMeaning?: string; focusNext?: string; outliers?: string[]; vocabRange?: string; vocabConsistency?: string };
 type FormAnalysis = { overallFormLevel: string; overallFormSummary: string; dimensions: FormDimension[] };
 type WritingPrompt = { promptTitle: string; promptText: string; suggestedWords: [number, number]; topicSummary: string };
 type ProbeTarget = { azeId: string; claim: string; level: string; fn: string; confidence: string };
@@ -867,6 +867,14 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .form-dim-evidence-label { font-weight:600; color:#94a3b8 }
 .form-dim-evidence-quote { font-style:italic }
 .form-dim-focus { font-size:.775rem; color:var(--s-accent); margin-top:10px; line-height:1.5; padding-top:8px; border-top:1px solid rgba(255,255,255,.04) }
+.form-dim-outliers { font-size:.725rem; color:#fbbf24; margin-top:8px; line-height:1.5 }
+.form-dim-outliers-label { font-weight:600 }
+.form-dim-outliers-quote { font-style:italic }
+.form-dim-vocab-split { display:flex; gap:16px; margin-top:10px; padding:10px 14px; background:rgba(56,189,248,.04); border:1px solid rgba(56,189,248,.1); border-radius:8px }
+.form-dim-vocab-metric { flex:1 }
+.form-dim-vocab-metric-label { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--s-text-muted); margin-bottom:2px }
+.form-dim-vocab-metric-value { font-size:.825rem; font-weight:600; color:var(--s-text) }
+.form-dim-vocab-metric-value.reaching { color:#fbbf24 }
 .next-steps-list { display:flex; flex-direction:column; gap:8px }
 .next-step-item { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); border-radius:10px; font-size:.825rem; color:var(--s-text-muted); line-height:1.5 }
 .next-step-item::before { content:'→'; color:var(--s-accent); font-weight:700; flex-shrink:0; margin-top:1px }
@@ -2024,6 +2032,26 @@ export default function WritingTestPage() {
                       ))}
                     </div>
                   )}
+                  {dim.outliers && dim.outliers.length > 0 && (
+                    <div className="form-dim-outliers">
+                      <span className="form-dim-outliers-label">Reaching above your level: </span>
+                      {dim.outliers.map((ol, j) => (
+                        <span key={j} className="form-dim-outliers-quote">&ldquo;{ol}&rdquo;{j < dim.outliers!.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.dimension === "Vocabulary Range" && dim.vocabRange && dim.vocabRange !== dim.level && (
+                    <div className="form-dim-vocab-split">
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Range (highest demonstrated)</div>
+                        <div className={`form-dim-vocab-metric-value${dim.vocabRange !== dim.level ? " reaching" : ""}`}>{dim.vocabRange}</div>
+                      </div>
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Consistency</div>
+                        <div className="form-dim-vocab-metric-value">{dim.vocabConsistency === "consistent" ? "Sustained throughout" : dim.vocabConsistency === "occasional" ? "Appears 2–3 times" : "Isolated moments"}</div>
+                      </div>
+                    </div>
+                  )}
                   {dim.focusNext && (
                     <div className="form-dim-focus">Next time, focus on: {dim.focusNext}</div>
                   )}
@@ -2751,9 +2779,9 @@ export default function WritingTestPage() {
     const fnSummary = Array.from(fnMap.values());
     const confirmedLevels = fnSummary.map(f => f.level).filter(l => l !== "—");
     const overallFn = medianCefrLevel(confirmedLevels, levelOrder);
-    type FormEntry = { dimension: string; level: string; descriptor: string; source: string; examples: string[]; levelMeaning?: string; focusNext?: string };
+    type FormEntry = { dimension: string; level: string; descriptor: string; source: string; examples: string[]; levelMeaning?: string; focusNext?: string; outliers?: string[]; vocabRange?: string; vocabConsistency?: string };
     const formEntries: FormEntry[] = [];
-    const addForm = (form: FormAnalysis | null, src: string) => { if (!form?.dimensions) return; for (const d of form.dimensions) { formEntries.push({ dimension: d.dimension, level: d.level, descriptor: d.descriptor, source: src, examples: d.examples ?? [], levelMeaning: d.levelMeaning, focusNext: d.focusNext }); } };
+    const addForm = (form: FormAnalysis | null, src: string) => { if (!form?.dimensions) return; for (const d of form.dimensions) { formEntries.push({ dimension: d.dimension, level: d.level, descriptor: d.descriptor, source: src, examples: d.examples ?? [], levelMeaning: d.levelMeaning, focusNext: d.focusNext, outliers: d.outliers, vocabRange: d.vocabRange, vocabConsistency: d.vocabConsistency }); } };
     addForm(t1Form, "T1"); addForm(t2Form, "T2"); addForm(t3Form, "T3"); addForm(t4Form, "T4"); addForm(t5Form, "T5");
     // Weighted aggregation: for each dimension, pick the entry from the most
     // appropriate task type rather than blindly taking the highest.
@@ -2778,7 +2806,20 @@ export default function WritingTestPage() {
       dimMap.set(dim, best);
     }
     const formSummary = Array.from(dimMap.values());
-    const overallFormLevels = formSummary.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0);
+    // Mechanics exclusion: compute mode from Grammar, Vocabulary, Discourse first.
+    // Only include Mechanics if it's within one band of that core mode.
+    const coreDims = formSummary.filter(f => f.dimension !== "Mechanics");
+    const coreLevels = coreDims.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0);
+    const coreMode = medianCefrLevel(coreLevels, levelOrder);
+    const mechanicsDim = formSummary.find(f => f.dimension === "Mechanics");
+    const mechanicsLevel = mechanicsDim?.level ?? "—";
+    const coreModeIdx = levelOrder.indexOf(coreMode);
+    const mechIdx = levelOrder.indexOf(mechanicsLevel);
+    // Include mechanics only if within 1 band of the core mode
+    const includeMechanics = mechIdx > 0 && Math.abs(coreModeIdx - mechIdx) <= 1;
+    const overallFormLevels = includeMechanics
+      ? formSummary.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0)
+      : coreLevels;
     const overallForm = medianCefrLevel(overallFormLevels, levelOrder);
     const nextSteps = getNextSteps([t1Diagnosis, t2Diagnosis, t3Diagnosis, t4Diagnosis, t5Diagnosis], formSummary.map(f => ({ dimension: f.dimension, level: f.level, descriptor: f.descriptor })));
     const taskNumsForFn = (fn: string) => [...new Set(fnEntries.filter(e => e.fn === fn).map(e => e.taskNum))].sort((a, b) => a - b);
@@ -2866,6 +2907,26 @@ export default function WritingTestPage() {
                       {dim.examples.map((ex, j) => (
                         <span key={j} className="form-dim-evidence-quote">&ldquo;{ex}&rdquo;{j < dim.examples.length - 1 ? " · " : ""}</span>
                       ))}
+                    </div>
+                  )}
+                  {dim.outliers && dim.outliers.length > 0 && (
+                    <div className="form-dim-outliers">
+                      <span className="form-dim-outliers-label">Reaching above your level: </span>
+                      {dim.outliers.map((ol, j) => (
+                        <span key={j} className="form-dim-outliers-quote">&ldquo;{ol}&rdquo;{j < dim.outliers!.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.dimension === "Vocabulary Range" && dim.vocabRange && dim.vocabRange !== dim.level && (
+                    <div className="form-dim-vocab-split">
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Range (highest demonstrated)</div>
+                        <div className={`form-dim-vocab-metric-value${dim.vocabRange !== dim.level ? " reaching" : ""}`}>{dim.vocabRange}</div>
+                      </div>
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Consistency</div>
+                        <div className="form-dim-vocab-metric-value">{dim.vocabConsistency === "consistent" ? "Sustained throughout" : dim.vocabConsistency === "occasional" ? "Appears 2–3 times" : "Isolated moments"}</div>
+                      </div>
                     </div>
                   )}
                   {dim.focusNext && (

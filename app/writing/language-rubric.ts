@@ -99,12 +99,19 @@ CEFR bands:
   · Subordinate clauses used (because, if, when, although)
   · Generally accurate; errors do not impede understanding
   · Some conditional use ("if I could, I would...")
+  · Control is present but INCONSISTENT — errors occur across the response
+  · Range is limited to familiar vocabulary and structures
   · Example: "Although I enjoy routine, I think variety is important."
 
   B1+
   · Complex sentences used with reasonable accuracy
   · Range of tenses including conditionals and perfect forms
   · Minor errors present but do not affect clarity
+  · Control is CONSISTENT across turns or paragraphs — accuracy is sustained
+  · Only occasional errors that do not affect the overall pattern
+  · If a candidate demonstrates consistent control across multiple turns
+    or a sustained piece of writing, with only minor surface errors,
+    the level is B1+, not B1
   · Example: "If it's the only place I travel, it may get repetitive."
 
   B2
@@ -163,12 +170,16 @@ CEFR bands:
   · Good range of topic vocabulary
   · Some paraphrasing evident
   · Abstract words used with reasonable accuracy
+  · Vocabulary range is adequate but NOT sustained — falls back to simpler
+    words frequently
   · Example: "destination, explore, familiar, variety, advantage"
 
   B1+
   · Wider vocabulary including some less common words
   · Paraphrasing used to avoid repetition
   · Collocations mostly natural
+  · Vocabulary range is sustained across the response — the candidate
+    consistently reaches for precise or less common words, not just once
   · Example: "perspective, revisit, collect destinations, trade-off"
 
   B2
@@ -202,6 +213,16 @@ Observable signals:
   - Reference cohesion: pronouns and determiners used correctly to
     refer back to earlier ideas
 
+CHAT TASK DISCOURSE RULE:
+  In chat tasks (T1, T3, T5), short but complete responses are NOT
+  penalised for lack of extended structure. Evaluate the effectiveness
+  of each turn, not essay-style progression across the full response.
+  A precise two-sentence counter-argument that is accurate and on-point
+  scores HIGHER than a longer response that develops ideas loosely.
+  Do NOT require statement-explanation-example progression in chat tasks.
+  Judge whether each turn achieves its communicative purpose — not
+  whether the candidate writes at length.
+
 CEFR bands:
 
   Pre-A1
@@ -226,6 +247,8 @@ CEFR bands:
   · Clear statement → explanation pattern
   · Range of linking devices used
   · Ideas mostly follow logically
+  · Discourse is functional but NOT sustained — logic breaks down in
+    longer stretches or under challenge
   · Example: "I like familiarity because you understand a place better.
               However, I think variety is also important."
 
@@ -233,6 +256,10 @@ CEFR bands:
   · Consistent idea development with examples
   · Counterpoints acknowledged
   · Cohesion mostly accurate
+  · Discourse is sustained — ideas connect logically across multiple
+    turns or paragraphs without losing coherence
+  · In chat: short, effective turns that stay on-topic and build on
+    what came before count as sustained discourse
   · Example: "That depends on the person and the place. For example,
               someone who travels for work needs variety, but a family
               on holiday might prefer familiarity."
@@ -309,12 +336,14 @@ CEFR bands:
   · Capitalisation consistent
   · Punctuation mostly correct; minor errors
   · Contractions used correctly
+  · Mechanics are functional but slips are noticeable — not yet fully consistent
   · Example: "I like travelling. It's a great way to learn."
 
   B1+
   · Very few spelling errors
   · Punctuation accurate including commas in complex sentences
   · Consistent and correct mechanics throughout
+  · Mechanics are sustained — errors are rare and do not form a pattern
 
   B2+
   · Virtually error-free mechanics
@@ -325,17 +354,63 @@ CEFR bands:
 SCORING INSTRUCTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+CRITICAL — DIMENSION INDEPENDENCE:
+Each dimension MUST be scored independently of the others.
+Do NOT let one dimension's score influence another.
+
+Specifically:
+- Spelling errors (Mechanics) must NOT suppress Vocabulary Range.
+  A misspelled word is a mechanics problem. If the word itself is
+  sophisticated and used in the right context, it counts as high
+  vocabulary regardless of the spelling.
+  Example: "simbyotic relationship" = B2 vocabulary, A2 mechanics.
+- Grammar errors must NOT suppress Discourse Management.
+  A candidate who connects ideas logically with linking devices
+  gets credit for discourse even if verb agreement is inconsistent.
+- Vocabulary limitations must NOT suppress Grammar Control.
+  A candidate who uses simple words in complex, accurate sentence
+  structures gets credit for grammar.
+
+Score each dimension by looking ONLY at the signals listed under
+that dimension. Ignore signals that belong to other dimensions.
+
 For each dimension:
 1. Identify the observable signals present in the candidate's text
 2. Match the pattern of signals to the closest CEFR band
-3. Be conservative: assign the lower band if evidence is mixed
+3. If the majority of signals support a band, assign that band.
+   Mixed evidence at a boundary level is normal and does NOT
+   justify automatic downgrading. Only downgrade if the weight
+   of evidence clearly favours the lower band.
 4. Provide 1-2 short direct quotes as evidence
 5. Write a 1-sentence descriptor in your own words
 
-Overall form level:
-· Assign the level supported by the MAJORITY of dimension scores
-· Do not average — use the mode
-· If split evenly, assign the lower of the two middle scores
+═══ OVERALL FORM LEVEL — AGGREGATION RULES ═══
+
+Rule 1 — Majority wins:
+  Assign the level supported by the MAJORITY of the four dimensions.
+  Do not average — use the mode.
+
+Rule 2 — Single-dimension override protection:
+  A single lower-scoring dimension CANNOT override a clear majority.
+  If three dimensions return B1+ and one returns B1, the overall form
+  level MUST be B1+. The minority dimension is noted in the summary
+  but does not determine the outcome.
+
+Rule 3 — Mechanics exclusion in chat tasks:
+  In chat tasks (T1, T3, T5), Mechanics must NOT determine the
+  overall form level UNLESS it scores two or more full bands lower
+  than the majority of the other three dimensions.
+  Surface errors such as missing capitalisation, lowercase pronouns,
+  and minor punctuation slips are register choices in chat — not form
+  errors. Do not allow Mechanics to suppress the overall form level
+  in chat contexts.
+  In practice: compute the mode from Grammar, Vocabulary, and Discourse
+  first. Only include Mechanics if it is within one band of that mode.
+
+Rule 4 — Even split:
+  If dimensions are split evenly (e.g. two at B1, two at B1+),
+  assign the HIGHER of the two levels if Grammar and Vocabulary are
+  both at the higher level. Otherwise assign the lower.
 
 Task context note:
 · Chat tasks (T1, T3, T5): some informality is expected and acceptable
@@ -371,6 +446,38 @@ TASK CONTEXT: ${contextNote}
 ${LANGUAGE_RUBRIC}
 
 ═══════════════════════════════════════════════════════════════
+OUTLIER DETECTION
+═══════════════════════════════════════════════════════════════
+
+For EVERY dimension: after assigning a level, scan the candidate's text for
+moments that EXCEED the assigned level. These are upward outliers — evidence
+the candidate is reaching beyond their consistent ability. Report them in the
+"outliers" field as direct quotes. If none exist, return an empty array.
+
+Example: A candidate scored B1 for Grammar who writes "Having considered all
+the options, I would argue..." — that participle clause is B2 grammar.
+Quote it as an outlier.
+
+═══════════════════════════════════════════════════════════════
+VOCABULARY: RANGE vs CONSISTENCY
+═══════════════════════════════════════════════════════════════
+
+For the Vocabulary dimension ONLY, provide two additional fields:
+
+"vocabRange": The HIGHEST vocabulary level the candidate demonstrated at
+least once. This can be above the assigned level. Base it on the single
+strongest vocabulary moment in the text.
+
+"vocabConsistency": How often the candidate sustains that range. One of:
+  - "consistent" — the higher-level vocabulary appears throughout
+  - "occasional" — it appears 2-3 times but most vocabulary is lower
+  - "isolated" — one or two standout moments, rest is clearly lower
+
+This separation matters: a candidate with B2 range but B1 consistency has
+a different profile from a candidate who is B1 across the board. Both get
+B1 as the vocabulary level, but the first one is reaching.
+
+═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
 
@@ -385,6 +492,7 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "level": "B1",
       "descriptor": "One sentence describing what this candidate actually does — not a generic band description.",
       "examples": ["direct quote 1", "direct quote 2"],
+      "outliers": ["direct quote that exceeds the assigned level — or empty array if none"],
       "levelMeaning": "One plain-English sentence explaining what this CEFR level means for this dimension — written for a non-expert reader.",
       "focusNext": "One actionable sentence telling the candidate what to practise to move up one level. Be specific — name a grammar structure, vocabulary strategy, or discourse move."
     },
@@ -393,6 +501,9 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "level": "B1",
       "descriptor": "One sentence.",
       "examples": ["direct quote 1", "direct quote 2"],
+      "outliers": ["direct quote that exceeds the assigned level — or empty array if none"],
+      "vocabRange": "B2",
+      "vocabConsistency": "occasional",
       "levelMeaning": "One sentence.",
       "focusNext": "One sentence."
     },
@@ -401,6 +512,7 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "level": "B1",
       "descriptor": "One sentence.",
       "examples": ["direct quote 1", "direct quote 2"],
+      "outliers": [],
       "levelMeaning": "One sentence.",
       "focusNext": "One sentence."
     },
@@ -409,6 +521,7 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "level": "B1",
       "descriptor": "One sentence.",
       "examples": ["direct quote 1"],
+      "outliers": [],
       "levelMeaning": "One sentence.",
       "focusNext": "One sentence."
     }
