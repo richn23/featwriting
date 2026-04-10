@@ -355,7 +355,7 @@ const azeMacro: AzeMacro[] = [
     level: "B1",
     microIds: ["w3-gse-49-e", "w3-gse-50-a"],
     signals: [
-      "Acknowledges more than one side (on one hand / but also / however)",
+      "Mentions at least one alternative view or opposing idea, even briefly",
       "Gives reasons FOR their position",
       "Shows awareness that others might think differently",
     ],
@@ -382,7 +382,7 @@ const azeMacro: AzeMacro[] = [
     signals: [
       "Opinion is backed by developed reasoning, not just assertions",
       "Multiple supporting points or examples",
-      "Argument has some depth — not surface level",
+      "At least one point is explained with a reason or example, not just stated",
     ],
   },
   {
@@ -404,7 +404,7 @@ const azeMacro: AzeMacro[] = [
     level: "B2",
     microIds: ["w3-gse-65-e"],
     signals: [
-      "Explicitly acknowledges the other side (I understand that... / It's true that...)",
+      "Integrates the opposing view into their own argument (concedes a point, then redirects)",
       "But still maintains and defends their own position",
       "Nuanced — not black and white",
     ],
@@ -418,7 +418,7 @@ const azeMacro: AzeMacro[] = [
     signals: [
       "Uses concrete examples or evidence to support abstract claims",
       "Argument is developed, not just asserted",
-      "Demonstrates depth of reasoning",
+      "Reasoning goes beyond personal experience — draws on wider knowledge, principles, or evidence",
     ],
   },
   {

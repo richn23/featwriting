@@ -433,7 +433,7 @@ const azeMacro: AzeMacro[] = [
     signals: [
       "Uses or attempts past, present, AND/OR future reference",
       "Shows awareness that time matters (yesterday, now, next week, since, etc.)",
-      "Not stuck in one tense throughout",
+      "At least one clear time reference (past, present, or future) — accuracy not required",
     ],
     notes: "Function over form — look for the attempt, not accuracy.",
   },

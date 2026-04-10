@@ -36,7 +36,7 @@ type MacroResult = {
 
 type LevelResult = { level: string; confirmed: boolean; canCount: number; threshold: string };
 type Diagnosis = { diagnosedLevel: string; levelResults: LevelResult[]; results: MacroResult[] };
-type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[] };
+type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[]; levelMeaning?: string; focusNext?: string };
 type FormAnalysis = { overallFormLevel: string; overallFormSummary: string; dimensions: FormDimension[] };
 type WritingPrompt = { promptTitle: string; promptText: string; suggestedWords: [number, number]; topicSummary: string };
 type ProbeTarget = { azeId: string; claim: string; level: string; fn: string; confidence: string };
@@ -238,6 +238,23 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .landing-section-body p + p { margin-top:16px }
 .landing-section-body strong { color:var(--s-text); font-weight:600 }
 .landing-section-pull { font-size:1.05rem; font-weight:600; line-height:1.55; color:var(--s-text); margin-top:16px }
+
+/* Comparison diagram */
+.landing-compare { margin:36px 0 24px; display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid rgba(255,255,255,.08); border-radius:16px; overflow:hidden }
+@media (max-width:640px) { .landing-compare { grid-template-columns:1fr } }
+.landing-compare-col { padding:24px 28px }
+.landing-compare-col:first-child { background:rgba(52,211,153,.04); border-right:1px solid rgba(255,255,255,.06) }
+@media (max-width:640px) { .landing-compare-col:first-child { border-right:none; border-bottom:1px solid rgba(255,255,255,.06) } }
+.landing-compare-col:last-child { background:rgba(255,255,255,.02) }
+.landing-compare-heading { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.14em; margin-bottom:20px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.06) }
+.landing-compare-col:first-child .landing-compare-heading { color:var(--s-accent) }
+.landing-compare-col:last-child .landing-compare-heading { color:var(--s-text-muted) }
+.landing-compare-row { margin-bottom:16px }
+.landing-compare-row:last-child { margin-bottom:0 }
+.landing-compare-row-label { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--s-text-muted); margin-bottom:4px; opacity:.7 }
+.landing-compare-row-value { font-size:.825rem; line-height:1.55; color:var(--s-text-muted) }
+.landing-compare-col:first-child .landing-compare-row-value { color:#c8d5e0 }
+.landing-compare-gap { grid-column:1 / -1; padding:16px 28px; background:rgba(52,211,153,.06); border-top:1px solid rgba(52,211,153,.15); text-align:center; font-size:.85rem; font-weight:600; color:var(--s-text); line-height:1.5 }
 
 /* Contrast quote block */
 .landing-contrast {
@@ -775,6 +792,16 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .split-briefing-task5 .sb-start-btn { box-shadow:0 4px 20px rgba(8,145,178,.25) }
 .split-briefing-task5 .sb-start-btn:hover { background:#06b6d4 }
 
+.skip-task-float {
+  position:fixed; bottom:24px; right:24px; z-index:9999;
+  padding:10px 18px; font-family:'DM Sans',sans-serif; font-size:.75rem; font-weight:600;
+  color:var(--s-text-muted); background:rgba(15,23,42,.92);
+  border:1px solid rgba(255,255,255,.1); border-radius:10px;
+  cursor:pointer; transition:all .2s ease;
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  box-shadow:0 4px 16px rgba(0,0,0,.3);
+}
+.skip-task-float:hover { color:var(--s-text); border-color:rgba(255,255,255,.2); background:rgba(15,23,42,.97) }
 .skip-task-btn {
   display: block;
   text-align: center;
@@ -827,11 +854,19 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .learner-can-item::before { content:''; position:absolute; left:0; top:.85em; width:5px; height:5px; border-radius:50%; background:var(--s-accent); opacity:.85 }
 .form-dim-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.04) }
 .form-dim-row:last-child { border-bottom:none }
+.form-dim-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:16px 18px; margin-bottom:14px }
+.form-dim-card:last-child { margin-bottom:0 }
+.form-dim-card-header { display:flex; align-items:center; gap:12px }
 .form-dim-name-new { flex:1; font-size:.8rem; font-weight:600; color:var(--s-text) }
-.form-dim-desc-new { flex:2; font-size:.775rem; color:var(--s-text-muted); line-height:1.5 }
+.form-dim-desc-new { font-size:.775rem; color:var(--s-text-muted); line-height:1.5; margin-top:8px }
 .form-dim-bar-new { flex:0 0 80px; height:4px; background:rgba(255,255,255,.06); border-radius:2px; overflow:hidden }
 .form-dim-bar-fill-new { height:100%; border-radius:2px; animation:barGrow .8s ease forwards }
 .form-dim-level-new { font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:6px; background:rgba(56,189,248,.1); color:#38bdf8; min-width:36px; text-align:center; flex-shrink:0 }
+.form-dim-meaning { font-size:.75rem; color:#94a3b8; margin-top:10px; line-height:1.5; font-style:italic }
+.form-dim-evidence { font-size:.725rem; color:#64748b; margin-top:8px; line-height:1.5 }
+.form-dim-evidence-label { font-weight:600; color:#94a3b8 }
+.form-dim-evidence-quote { font-style:italic }
+.form-dim-focus { font-size:.775rem; color:var(--s-accent); margin-top:10px; line-height:1.5; padding-top:8px; border-top:1px solid rgba(255,255,255,.04) }
 .next-steps-list { display:flex; flex-direction:column; gap:8px }
 .next-step-item { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); border-radius:10px; font-size:.825rem; color:var(--s-text-muted); line-height:1.5 }
 .next-step-item::before { content:'→'; color:var(--s-accent); font-weight:700; flex-shrink:0; margin-top:1px }
@@ -1971,11 +2006,27 @@ export default function WritingTestPage() {
             <div className="results-section animate-fade-up" style={{ animationDelay: taskNum === 4 ? "300ms" : "200ms" }}>
               <div className="results-section-title">{taskNum === 4 ? "Language control in your rewrites" : "How you communicate"}</div>
               {form?.dimensions?.map((dim, i) => (
-                <div key={dim.dimension} className="form-dim-row">
-                  <div className="form-dim-name-new">{dim.dimension}</div>
-                  <div className="form-dim-bar-new"><div className="form-dim-bar-fill-new" style={{ width: `${levelToPercent(dim.level)}%`, background: barColor(dim.level), animationDelay: `${i * .1}s` }} /></div>
-                  <div className="form-dim-level-new">{dim.level}</div>
+                <div key={dim.dimension} className="form-dim-card">
+                  <div className="form-dim-card-header">
+                    <div className="form-dim-name-new">{dim.dimension}</div>
+                    <div className="form-dim-bar-new"><div className="form-dim-bar-fill-new" style={{ width: `${levelToPercent(dim.level)}%`, background: barColor(dim.level), animationDelay: `${i * .1}s` }} /></div>
+                    <div className="form-dim-level-new">{dim.level}</div>
+                  </div>
+                  {dim.levelMeaning && (
+                    <div className="form-dim-meaning">{dim.level} means: {dim.levelMeaning}</div>
+                  )}
                   <div className="form-dim-desc-new">{dim.descriptor}</div>
+                  {dim.examples && dim.examples.length > 0 && (
+                    <div className="form-dim-evidence">
+                      <span className="form-dim-evidence-label">Evidence: </span>
+                      {dim.examples.map((ex, j) => (
+                        <span key={j} className="form-dim-evidence-quote">&ldquo;{ex}&rdquo;{j < dim.examples.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.focusNext && (
+                    <div className="form-dim-focus">Next time, focus on: {dim.focusNext}</div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2135,8 +2186,24 @@ export default function WritingTestPage() {
      ═══════════════════════════════════════════════════════════════════════ */
 
   const S = <style dangerouslySetInnerHTML={{ __html: styles }} />;
+  // Floating skip button — always jumps to final report for quick testing
+  const skippablePhases = new Set<Phase>([
+    "t1-conversation", "t1-probing", "t1-eliciting", "t1-diagnosing", "t1-results",
+    "t2-scaffolding", "t2-generating-prompt", "t2-writing", "t2-diagnosing", "t2-results",
+    "t3-topic-select", "t3-conversation", "t3-probing", "t3-diagnosing", "t3-results",
+    "t4-loading-stimuli", "t4-challenges", "t4-diagnosing", "t4-results",
+    "t5-loading", "t5-conversation", "t5-probing", "t5-diagnosing", "t5-results",
+  ]);
+
   const wrap = (children: React.ReactNode) => (
-    <div className="stakeholder-theme">{S}{children}</div>
+    <div className="stakeholder-theme">
+      {S}{children}
+      {skippablePhases.has(phase) && (
+        <button type="button" className="skip-task-float" onClick={() => setPhase("final-report")}>
+          Skip to Report →
+        </button>
+      )}
+    </div>
   );
 
   if (phase === "loading" || !t1Config) return wrap(<main className="diagnosing-container"><div className="spinner" style={{ margin: "0 auto" }} /></main>);
@@ -2153,10 +2220,13 @@ export default function WritingTestPage() {
       {/* Hero */}
       <section className="landing-hero animate-fade-up">
         <div className="landing-hero-eyebrow">FEAT Writing Test</div>
-        <h1 className="landing-hero-title">Testing Communicative <em>Function</em>,<br/>Not Just Genre</h1>
-        <p className="landing-hero-anchor">Function-based writing assessment.</p>
+        <h1 className="landing-hero-title">Function First.<br/><em>Form Second.</em></h1>
+        <p className="landing-hero-anchor">A function-based writing assessment platform.</p>
         <p className="landing-hero-hook">
           A mechanic is assessed by fixing an engine. A chef by preparing a dish. FEAT assesses writing the same way — through what learners actually do with language, not whether they can produce the right kind of text.
+        </p>
+        <p className="landing-hero-hook" style={{ fontSize: ".9rem", color: "var(--s-text-muted)", opacity: 0.8, marginTop: "-8px" }}>
+          It tests communicative function, not genre.
         </p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
@@ -2168,10 +2238,57 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "100ms" }}>
         <div className="landing-section-label">The problem</div>
         <div className="landing-section-body">
-          <p>Most writing tests ask candidates to produce a genre: an essay, a report, a formal letter. Can you produce the right kind of text? Format. Structure. Register.</p>
+          <p>Most writing tests ask candidates to produce a genre: an essay, a report, a formal letter. Can you produce the right kind of text? Format. Structure. Register. Grammar. Vocabulary. They measure the language you use.</p>
           <p>This captures important skills, but only part of what it means to communicate in writing.</p>
           <p>CEFR descriptors are function-based: can the learner inform, express, argue, interact? But many CEFR-aligned assessments are still built around genre tasks.</p>
+          <p>Consider the extremes. A learner can have poor grammar and still make a point clearly. Another can write near-perfect sentences that communicate nothing useful. The language you use and what you can do with language are related — but they are not the same thing.</p>
+          <p>We know jagged profiles exist. The strong communicator who makes errors in every sentence. The weak communicator with perfect accuracy. Real learners don&apos;t sit neatly on one side of a line — and an assessment that collapses everything into a single score will always struggle to show you which one you&apos;re dealing with. On a traditional test, they often look the same.</p>
           <p className="landing-section-pull">We test the format. We don&apos;t always test the communication.</p>
+
+          {/* Comparison diagram */}
+          <div className="landing-compare">
+            <div className="landing-compare-col">
+              <div className="landing-compare-heading">What CEFR says</div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">What is measured</div>
+                <div className="landing-compare-row-value">Communicative function — can the learner inform, narrate, argue?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">The question being asked</div>
+                <div className="landing-compare-row-value">What do you need to do? Explain, persuade, clarify, respond.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Language</div>
+                <div className="landing-compare-row-value">A separate dimension — how well does the language serve the purpose?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Scoring basis</div>
+                <div className="landing-compare-row-value">Evidence of function — did the communication work?</div>
+              </div>
+            </div>
+            <div className="landing-compare-col">
+              <div className="landing-compare-heading">What most assessments do</div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">What is measured</div>
+                <div className="landing-compare-row-value">Genre and language accuracy — right text type, correct language use.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">The question being asked</div>
+                <div className="landing-compare-row-value">What should it look like? Essay, report, formal letter, email.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Language</div>
+                <div className="landing-compare-row-value">Grammar, vocabulary, punctuation — how accurate is the language?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Scoring basis</div>
+                <div className="landing-compare-row-value">Task achievement is considered, but language correctness drives the level.</div>
+              </div>
+            </div>
+            <div className="landing-compare-gap">
+              Most assessments ask: how accurate is the language? FEAT asks: did the communication work?
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2179,13 +2296,13 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
         <div className="landing-section-label">The approach</div>
         <div className="landing-section-body">
-          <p>FEAT starts from what learners are trying to do with language. Instead of a single static prompt, it tests through live back-and-forth tasks.</p>
+          <p>FEAT starts from what the learner is trying to do with language. Not a single static prompt — live, back-and-forth tasks that demand real communication.</p>
           <div className="landing-contrast">
-            <p className="not">Instead of asking someone to write an essay about technology,</p>
-            <p className="but">ask them to explain an idea to someone who does not understand it.</p>
+            <p className="not">Instead of: write an essay about technology,</p>
+            <p className="but">FEAT asks: explain an idea to someone who doesn&apos;t understand it.</p>
           </div>
-          <p>They may need to justify a view when challenged, or clarify when something is misunderstood. The AI responds, asks follow-ups, challenges, and sometimes misunderstands on purpose.</p>
-          <p>Level comes from patterns of evidence across the full session — not one isolated task score.</p>
+          <p>The candidate may need to justify a view when challenged. Clarify when misunderstood. Adapt when the situation shifts. The AI responds, follows up, pushes back, and sometimes misunderstands on purpose — because real communication requires all of that.</p>
+          <p>Level comes from patterns of evidence across the full session. Not one task. Not one score. A profile.</p>
         </div>
       </section>
 
@@ -2193,8 +2310,8 @@ export default function WritingTestPage() {
       <section className="landing-section animate-fade-up" style={{ animationDelay: "250ms" }}>
         <div className="landing-section-label">How it&apos;s controlled</div>
         <div className="landing-section-body">
-          <p>Each task follows a defined structure. The system varies prompts and challenges within set parameters to ensure comparable difficulty across sessions.</p>
-          <p>Evidence is gathered across multiple tasks and mapped to CEFR and GSE descriptors. Scoring is based on what candidates demonstrate, not single responses or impressions.</p>
+          <p>Every task follows a defined structure. The system varies prompts and challenges within set parameters — so each session is different, but difficulty remains comparable.</p>
+          <p>Evidence is gathered across multiple tasks and mapped directly to CEFR and GSE descriptors. Scoring is based on what candidates demonstrate — not single responses, not impressions, not a holistic guess. Confirmed evidence or nothing.</p>
         </div>
       </section>
 
@@ -2202,18 +2319,18 @@ export default function WritingTestPage() {
       <div className="landing-split-section animate-fade-up" style={{ animationDelay: "300ms" }}>
         <div className="landing-split-left">
           <div className="landing-split-block-label">What you get</div>
-          <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Two complementary outputs</div>
+          <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Two outputs, not one score</div>
           <div className="landing-split-block-body">
-            <p>Most writing assessments combine everything into a single score. FEAT separates two things that are fundamentally different.</p>
+            <p>Most assessments collapse everything into a single number. FEAT separates two things that are fundamentally different — because they are.</p>
           </div>
           <div className="landing-outputs">
             <div className="landing-output-item">
               <div className="landing-output-item-label fn">Function profile</div>
-              <div className="landing-output-item-desc">What the learner can do: their ability across interactional, informing, arguing, and mediating functions.</div>
+              <div className="landing-output-item-desc">What the learner can do — their ability to interact, inform, argue, narrate, mediate, and direct. Each function scored independently.</div>
             </div>
             <div className="landing-output-item">
               <div className="landing-output-item-label form">Language profile</div>
-              <div className="landing-output-item-desc">How effectively they do it: control of grammar, vocabulary, coherence, and register.</div>
+              <div className="landing-output-item-desc">How well they do it — grammar control, vocabulary range, discourse management, and mechanics. With evidence, plain-English explanation, and specific advice for improvement.</div>
             </div>
           </div>
         </div>
@@ -2222,16 +2339,16 @@ export default function WritingTestPage() {
             <div className="landing-split-block-label">How it works</div>
             <div className="landing-split-block-title">Grounded in established frameworks</div>
             <div className="landing-split-block-body">
-              <p>We start from communicative descriptors in CEFR and GSE, group them into broader purposes — informing, explaining, justifying, interacting — and turn them into behaviours we can test through interaction.</p>
-              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You don&apos;t get one overall task score. You get a profile of what the learner can do.</p>
+              <p>FEAT starts from communicative descriptors in CEFR and GSE. It groups them into broader purposes — informing, arguing, mediating, interacting — and turns them into behaviours that can be tested through live interaction.</p>
+              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You don&apos;t get one overall score. You get a profile of what the learner can and cannot do.</p>
             </div>
           </div>
           <div className="landing-split-block">
             <div className="landing-split-block-label">Scope</div>
             <div className="landing-split-block-title">What this does and doesn&apos;t replace</div>
             <div className="landing-split-block-body">
-              <p>Academic writing, professional genres, and extended composition remain important and need their own tools.</p>
-              <p>For general English, testing purpose and communication in context offers a flexible, CEFR-aligned way to diagnose ability without depending on fixed text types alone.</p>
+              <p>Academic writing, professional genres, and extended composition remain important. They need their own tools.</p>
+              <p>For general English, testing purpose and communication in context offers a flexible, CEFR-aligned way to diagnose ability — without depending on fixed text types alone.</p>
             </div>
           </div>
         </div>
@@ -2241,14 +2358,14 @@ export default function WritingTestPage() {
       <div className="landing-tasks animate-fade-up" style={{ animationDelay: "350ms" }}>
         <div className="landing-tasks-label">Test structure</div>
         <div className="landing-tasks-title">Five tasks, one session</div>
-        <div className="landing-tasks-intro">The assessment strings several tasks together so we can see how candidates respond across different kinds of demand.</div>
+        <div className="landing-tasks-intro">Each task tests different communicative demands. Together, they build a complete picture of what the learner can do.</div>
         <div className="landing-task-grid">
           {[
-            { num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat", desc: "Real-time text chat with an AI examiner. It adapts as you go, to probe ability and to test interactional and informing skills." },
-            { num: "T2", cls: "t2", fn: "Inform & Narrate", name: "Extended Writing", desc: "A short scaffold followed by extended response. Tests clarity, sequencing, and the ability to provide detail across levels." },
-            { num: "T3", cls: "t3", fn: "Express & Argue", name: "Opinion Chat", desc: "An interactive written discussion where the AI challenges, disagrees, and pushes for justification." },
-            { num: "T4", cls: "t4", fn: "Rephrase & Adjust", name: "Pragmatic Control", desc: "Rewrite a text for a different audience or purpose. Tests paraphrasing, register control, and flexibility." },
-            { num: "T5", cls: "t5", fn: "Compare & Advise", name: "Mediation", desc: "Evaluate two options, explain differences, recommend a choice, and adapt advice as conditions change." },
+            { num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat", desc: "Live text chat with an AI examiner. It adapts in real time — probing ability, testing how the candidate interacts and informs." },
+            { num: "T2", cls: "t2", fn: "Inform & Narrate", name: "Extended Writing", desc: "Scaffolded prompt followed by extended response. Tests clarity, sequencing, and the ability to develop detail." },
+            { num: "T3", cls: "t3", fn: "Express & Argue", name: "Opinion Chat", desc: "Interactive discussion where the AI challenges, disagrees, and pushes for justification. Can you hold your position?" },
+            { num: "T4", cls: "t4", fn: "Rephrase & Adjust", name: "Pragmatic Control", desc: "Rewrite a text for a different audience or purpose. Tests paraphrasing, register control, and linguistic flexibility." },
+            { num: "T5", cls: "t5", fn: "Compare & Advise", name: "Mediation", desc: "Evaluate options, explain differences, recommend a choice, and adapt advice when conditions change." },
           ].map(t => (
             <div key={t.num} className="landing-task-card">
               <div className={`landing-task-num ${t.cls}`}>{t.num}</div>
@@ -2262,8 +2379,8 @@ export default function WritingTestPage() {
 
       {/* Final CTA */}
       <div className="landing-final-cta animate-fade-up" style={{ animationDelay: "400ms" }}>
-        <h2 className="landing-final-cta-title">A more direct reflection<br/>of <em>writing ability</em></h2>
-        <p className="landing-final-cta-sub">Function first. Form second. A clearer view of what learners can do with language and how they do it.</p>
+        <h2 className="landing-final-cta-title"><em>Functional Evidence-based</em><br/>Assessment Tasks</h2>
+        <p className="landing-final-cta-sub">The name says what it does.</p>
         <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
           Begin Test Demo
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -2273,7 +2390,7 @@ export default function WritingTestPage() {
       {/* Footer */}
       <footer className="landing-footer">
         <div className="landing-footer-logo">FEAT <em>Writing</em></div>
-        <div className="landing-footer-note">Function-based writing assessment · Prototype</div>
+        <div className="landing-footer-note">Functional Evidence-based Assessment Tasks · Prototype</div>
       </footer>
 
       {accessModalOpen && (
@@ -2634,12 +2751,32 @@ export default function WritingTestPage() {
     const fnSummary = Array.from(fnMap.values());
     const confirmedLevels = fnSummary.map(f => f.level).filter(l => l !== "—");
     const overallFn = medianCefrLevel(confirmedLevels, levelOrder);
-    type FormEntry = { dimension: string; level: string; descriptor: string; source: string };
+    type FormEntry = { dimension: string; level: string; descriptor: string; source: string; examples: string[]; levelMeaning?: string; focusNext?: string };
     const formEntries: FormEntry[] = [];
-    const addForm = (form: FormAnalysis | null, src: string) => { if (!form?.dimensions) return; for (const d of form.dimensions) { formEntries.push({ dimension: d.dimension, level: d.level, descriptor: d.descriptor, source: src }); } };
+    const addForm = (form: FormAnalysis | null, src: string) => { if (!form?.dimensions) return; for (const d of form.dimensions) { formEntries.push({ dimension: d.dimension, level: d.level, descriptor: d.descriptor, source: src, examples: d.examples ?? [], levelMeaning: d.levelMeaning, focusNext: d.focusNext }); } };
     addForm(t1Form, "T1"); addForm(t2Form, "T2"); addForm(t3Form, "T3"); addForm(t4Form, "T4"); addForm(t5Form, "T5");
+    // Weighted aggregation: for each dimension, pick the entry from the most
+    // appropriate task type rather than blindly taking the highest.
+    // Grammar & Mechanics → prefer extended writing (T2) then transform (T4)
+    // Vocabulary → prefer extended writing (T2) then highest across all
+    // Discourse → prefer chat tasks (T1, T3, T5) then highest across all
+    const dimPriority: Record<string, string[]> = {
+      "Grammar Control": ["T2", "T4"],
+      "Mechanics": ["T2", "T4"],
+      "Vocabulary Range": ["T2"],
+      "Discourse Management": ["T1", "T3", "T5"],
+    };
     const dimMap = new Map<string, FormEntry>();
-    for (const e of formEntries) { const existing = dimMap.get(e.dimension); if (!existing || levelOrder.indexOf(e.level) > levelOrder.indexOf(existing.level)) { dimMap.set(e.dimension, e); } }
+    for (const dim of ["Grammar Control", "Vocabulary Range", "Discourse Management", "Mechanics"]) {
+      const entries = formEntries.filter(e => e.dimension === dim);
+      if (entries.length === 0) continue;
+      const preferred = dimPriority[dim] ?? [];
+      // First: look for the highest score among preferred task types
+      const preferredEntries = entries.filter(e => preferred.includes(e.source));
+      const pool = preferredEntries.length > 0 ? preferredEntries : entries;
+      const best = pool.reduce((a, b) => levelOrder.indexOf(b.level) > levelOrder.indexOf(a.level) ? b : a, pool[0]);
+      dimMap.set(dim, best);
+    }
     const formSummary = Array.from(dimMap.values());
     const overallFormLevels = formSummary.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0);
     const overallForm = medianCefrLevel(overallFormLevels, levelOrder);
@@ -2711,13 +2848,29 @@ export default function WritingTestPage() {
             <section className="final-report-section animate-fade-up" style={{ animationDelay: "140ms" }}>
               <h2 className="final-report-section-title">How you communicate</h2>
               {formSummary.map((dim, i) => (
-                <div key={dim.dimension} className="form-dim-row">
-                  <div className="form-dim-name-new">{dim.dimension}</div>
-                  <div className="form-dim-bar-new">
-                    <div className="form-dim-bar-fill-new" style={{ width: `${levelToPercent(dim.level)}%`, background: barColor(dim.level), animationDelay: `${i * 0.08}s` }} />
+                <div key={dim.dimension} className="form-dim-card">
+                  <div className="form-dim-card-header">
+                    <div className="form-dim-name-new">{dim.dimension}</div>
+                    <div className="form-dim-bar-new">
+                      <div className="form-dim-bar-fill-new" style={{ width: `${levelToPercent(dim.level)}%`, background: barColor(dim.level), animationDelay: `${i * 0.08}s` }} />
+                    </div>
+                    <div className="form-dim-level-new">{dim.level}</div>
                   </div>
-                  <div className="form-dim-level-new">{dim.level}</div>
+                  {dim.levelMeaning && (
+                    <div className="form-dim-meaning">{dim.level} means: {dim.levelMeaning}</div>
+                  )}
                   <div className="form-dim-desc-new">{dim.descriptor}</div>
+                  {dim.examples && dim.examples.length > 0 && (
+                    <div className="form-dim-evidence">
+                      <span className="form-dim-evidence-label">Evidence: </span>
+                      {dim.examples.map((ex, j) => (
+                        <span key={j} className="form-dim-evidence-quote">&ldquo;{ex}&rdquo;{j < dim.examples.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.focusNext && (
+                    <div className="form-dim-focus">Next time, focus on: {dim.focusNext}</div>
+                  )}
                 </div>
               ))}
             </section>

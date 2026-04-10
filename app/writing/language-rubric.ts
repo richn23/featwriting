@@ -384,25 +384,33 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "dimension": "Grammar Control",
       "level": "B1",
       "descriptor": "One sentence describing what this candidate actually does — not a generic band description.",
-      "examples": ["direct quote 1", "direct quote 2"]
+      "examples": ["direct quote 1", "direct quote 2"],
+      "levelMeaning": "One plain-English sentence explaining what this CEFR level means for this dimension — written for a non-expert reader.",
+      "focusNext": "One actionable sentence telling the candidate what to practise to move up one level. Be specific — name a grammar structure, vocabulary strategy, or discourse move."
     },
     {
       "dimension": "Vocabulary Range",
       "level": "B1",
       "descriptor": "One sentence.",
-      "examples": ["direct quote 1", "direct quote 2"]
+      "examples": ["direct quote 1", "direct quote 2"],
+      "levelMeaning": "One sentence.",
+      "focusNext": "One sentence."
     },
     {
       "dimension": "Discourse Management",
       "level": "B1",
       "descriptor": "One sentence.",
-      "examples": ["direct quote 1", "direct quote 2"]
+      "examples": ["direct quote 1", "direct quote 2"],
+      "levelMeaning": "One sentence.",
+      "focusNext": "One sentence."
     },
     {
       "dimension": "Mechanics",
       "level": "B1",
       "descriptor": "One sentence.",
-      "examples": ["direct quote 1"]
+      "examples": ["direct quote 1"],
+      "levelMeaning": "One sentence.",
+      "focusNext": "One sentence."
     }
   ]
 }`;
