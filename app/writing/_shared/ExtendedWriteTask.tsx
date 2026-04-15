@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { TaskDefinition } from "../_tasks/types";
-import type { TaskConfig, Diagnosis, FormAnalysis, Message, WritingPrompt } from "./types";
+import type { TaskConfig, Diagnosis, Message, WritingPrompt } from "./types";
 import { writingStyles } from "./styles";
 import { resizeTextareaToContent } from "./helpers";
 import { PhoneChat } from "./PhoneChat";
 import { ResultsDashboard } from "./ResultsDashboard";
+import { saveTaskSamples } from "./sampleStore";
 
 type ExtendedWritePhase = "loading-config" | "briefing" | "scaffolding" | "generating-prompt" | "writing" | "diagnosing" | "results";
 
@@ -25,7 +26,6 @@ export function ExtendedWriteTask({ task }: ExtendedWriteTaskProps) {
   const [prompt, setPrompt] = useState<WritingPrompt | null>(null);
   const [writtenText, setWrittenText] = useState("");
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
-  const [form, setForm] = useState<FormAnalysis | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showTranscript, setShowTranscript] = useState(false);
   const [showWriting, setShowWriting] = useState(false);
@@ -114,6 +114,8 @@ export function ExtendedWriteTask({ task }: ExtendedWriteTaskProps) {
   const submitWriting = async () => {
     if (!writtenText.trim()) return;
     setPhase("diagnosing");
+    // Save the extended writing sample for the pooled final report.
+    saveTaskSamples(task.id, task.label, [writtenText]);
     try {
       const res = await fetch(task.apiEndpoint, {
         method: "POST",
@@ -123,7 +125,7 @@ export function ExtendedWriteTask({ task }: ExtendedWriteTaskProps) {
       const data = await res.json();
       if (data.diagnosis) {
         setDiagnosis(data.diagnosis);
-        if (data.formAnalysis) setForm(data.formAnalysis);
+        // Language/form analysis moved to final cross-task report — don't set per-task.
       }
       setPhase("results");
     } catch {
@@ -255,15 +257,15 @@ export function ExtendedWriteTask({ task }: ExtendedWriteTaskProps) {
           taskNum={task.taskNum}
           config={config}
           diagnosis={diagnosis}
-          form={form}
+          form={null}
           expanded={expanded}
           setExpanded={setExpanded}
           showTranscript={showTranscript}
           setShowTranscript={setShowTranscript}
-          messages={scaffoldMsgs}
-          writtenText={writtenText}
           showWriting={showWriting}
           setShowWriting={setShowWriting}
+          messages={scaffoldMsgs}
+          writtenText={writtenText}
         />
       </main>
     );

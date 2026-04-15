@@ -426,13 +426,15 @@ Task context note:
 export type TaskContext =
   | "chat"        // T1, T3, T5 — written chat exchanges
   | "extended"    // T2 — longer written response
-  | "transform";  // T4 — stimulus rewrite
+  | "transform"   // T4 — stimulus rewrite
+  | "pooled";     // cross-task pooled final report
 
 export function buildLanguageAnalysisPrompt(taskContext: TaskContext): string {
   const contextNote = {
     chat: "This is a CHAT TASK (WhatsApp-style text conversation). The candidate typed short messages in a conversational exchange. Chat abbreviations (u, lol, btw), missing capitals, missing full stops, and sentence fragments are REGISTER CHOICES — not errors. Score the underlying grammar, vocabulary, and discourse management. Do NOT penalise chat informality. See the CHAT REGISTER CALIBRATION section in the rubric.",
     extended: "This is an EXTENDED WRITING TASK. The candidate wrote a longer continuous response. Hold to written register standards. Chat informality IS relevant to score here.",
     transform: "This is a TRANSFORMATION TASK. Assess the candidate's REWRITTEN text only — not the original stimulus. Focus on whether they controlled language for the target register/audience.",
+    pooled: "This is a POOLED CROSS-TASK REPORT. You are seeing candidate writing samples from multiple tasks (chat, extended writing, transformation) concatenated together with task headers. Assess the candidate's OVERALL language ability across the whole corpus. Chat-register informality in chat sections is not an error; extended-writing sections should be held to written standards. Base your judgement on the candidate's best sustained evidence across all tasks — do not average down because of short chat turns.",
   }[taskContext];
 
   return `You are a CEFR-trained language analyst. Analyse the candidate's written output using the rubric below.

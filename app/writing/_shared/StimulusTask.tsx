@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { TaskDefinition } from "../_tasks/types";
-import type { TaskConfig, Diagnosis, FormAnalysis, StimulusItem, Message } from "./types";
+import type { TaskConfig, Diagnosis, StimulusItem, Message } from "./types";
 import { resizeTextareaToContent } from "./helpers";
 import { writingStyles } from "./styles";
 import { ResultsDashboard } from "./ResultsDashboard";
+import { saveTaskSamples } from "./sampleStore";
 
 type StimulusPhase = "loading-config" | "briefing" | "loading-stimuli" | "challenges" | "diagnosing" | "results";
 
@@ -20,7 +21,6 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
-  const [form, setForm] = useState<FormAnalysis | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showTranscript, setShowTranscript] = useState(false);
 
@@ -57,6 +57,8 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
     const payload = stimuli.map(s => ({
       stimulusId: s.id, instruction: s.instruction, stimulus: s.stimulus, response: responses[s.id] || "",
     }));
+    // Save candidate samples for the final pooled language report
+    saveTaskSamples(task.id, task.label, stimuli.map(s => responses[s.id] || ""));
     try {
       const res = await fetch(task.apiEndpoint, {
         method: "POST",
@@ -66,7 +68,7 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
       const data = await res.json();
       if (data.diagnosis) {
         setDiagnosis(data.diagnosis);
-        if (data.formAnalysis) setForm(data.formAnalysis);
+        // Language/form analysis moved to final cross-task report — don't set per-task.
       }
       setPhase("results");
     } catch {
@@ -150,6 +152,7 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
     return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your transformations…</p></div></main>);
   }
 
+
   if (phase === "results") {
     const transcriptMsgs: Message[] = stimuli.flatMap(s => [
       { role: "assistant" as const, content: `[${s.label}] ${s.instruction}\n\nOriginal: "${s.stimulus}"` },
@@ -162,7 +165,7 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
           taskNum={task.taskNum}
           config={config}
           diagnosis={diagnosis}
-          form={form}
+          form={null}
           expanded={expanded}
           setExpanded={setExpanded}
           showTranscript={showTranscript}

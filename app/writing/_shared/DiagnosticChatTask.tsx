@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import type { TaskDefinition } from "../_tasks/types";
-import type { TaskConfig, Diagnosis, FormAnalysis, Message, ProbeTarget, ElicitationTarget } from "./types";
+import type { TaskConfig, Diagnosis, Message, ProbeTarget, ElicitationTarget } from "./types";
 import { writingStyles } from "./styles";
 import { PhoneChat } from "./PhoneChat";
 import { ResultsDashboard } from "./ResultsDashboard";
+import { saveTaskSamples } from "./sampleStore";
 
 type DiagnosticChatPhase = "loading-config" | "briefing" | "conversation" | "probing" | "eliciting" | "diagnosing" | "results";
 
@@ -22,7 +23,6 @@ export function DiagnosticChatTask({ task }: DiagnosticChatTaskProps) {
   const [processing, setProcessing] = useState(false);
   const [exchangeCount, setExchangeCount] = useState(0);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
-  const [form, setForm] = useState<FormAnalysis | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showTranscript, setShowTranscript] = useState(false);
   const doneRef = useRef(false);
@@ -166,7 +166,15 @@ export function DiagnosticChatTask({ task }: DiagnosticChatTaskProps) {
       const data = await res.json();
       if (data.diagnosis) {
         setDiagnosis(data.diagnosis);
-        if (data.formAnalysis) setForm(data.formAnalysis);
+        // Language/form analysis moved to final cross-task report — don't set per-task.
+      }
+      // Save candidate samples (user messages) for the pooled language report.
+      if (!isProbeRound && !isElicitRound) {
+        saveTaskSamples(
+          task.id,
+          task.label,
+          finalMsgs.filter(m => m.role === "user").map(m => m.content),
+        );
       }
 
       // Check if probing is needed (only on first diagnosis, not after probe/elicit)
@@ -416,7 +424,7 @@ export function DiagnosticChatTask({ task }: DiagnosticChatTaskProps) {
           taskNum={task.taskNum}
           config={config}
           diagnosis={diagnosis}
-          form={form}
+          form={null}
           expanded={expanded}
           setExpanded={setExpanded}
           showTranscript={showTranscript}

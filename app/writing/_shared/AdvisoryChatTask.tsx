@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import type { TaskDefinition } from "../_tasks/types";
-import type { TaskConfig, Diagnosis, FormAnalysis, Message, ProbeTarget } from "./types";
+import type { TaskConfig, Diagnosis, Message, ProbeTarget } from "./types";
 import { writingStyles } from "./styles";
 import { PhoneChat } from "./PhoneChat";
 import { ResultsDashboard } from "./ResultsDashboard";
+import { saveTaskSamples } from "./sampleStore";
 
 type AdvisoryChatPhase = "loading-config" | "briefing" | "loading-stimulus" | "conversation" | "probing" | "diagnosing" | "results";
 
@@ -28,7 +29,6 @@ export function AdvisoryChatTask({ task }: AdvisoryChatTaskProps) {
   const [probeTargets, setProbeTargets] = useState<ProbeTarget[]>([]);
   const [probeCount, setProbeCount] = useState(0);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
-  const [form, setForm] = useState<FormAnalysis | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showTranscript, setShowTranscript] = useState(false);
   const doneRef = useRef(false);
@@ -132,7 +132,15 @@ export function AdvisoryChatTask({ task }: AdvisoryChatTaskProps) {
       const data = await res.json();
       if (data.diagnosis) {
         setDiagnosis(data.diagnosis);
-        if (data.formAnalysis) setForm(data.formAnalysis);
+        // Language/form analysis moved to final cross-task report — don't set per-task.
+      }
+      // Save candidate samples (user messages) for the pooled language report.
+      if (!isProbeRound) {
+        saveTaskSamples(
+          task.id,
+          task.label,
+          finalMsgs.filter(m => m.role === "user").map(m => m.content),
+        );
       }
 
       if (!isProbeRound && data.probeTargets && data.probeTargets.length > 0) {
@@ -325,7 +333,7 @@ export function AdvisoryChatTask({ task }: AdvisoryChatTaskProps) {
           taskNum={task.taskNum}
           config={config}
           diagnosis={diagnosis}
-          form={form}
+          form={null}
           expanded={expanded}
           setExpanded={setExpanded}
           showTranscript={showTranscript}

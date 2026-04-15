@@ -79,8 +79,10 @@ export function ResultsDashboard({
         <div className="results-score-block">
           {score !== null && (<><div className="results-score-item"><div className="results-score-label">Score</div><div className="results-score-value num">{score.toFixed(1)}</div><div className="results-score-sub">out of 10</div></div><div className="results-score-divider" /></>)}
           <div className="results-score-item"><div className="results-score-label">Level</div><div className="results-score-value fn">{fnLevel}</div><div className="results-score-sub">{softened !== fnLevel ? softened : "CEFR"}</div></div>
+          {form && (<>
           <div className="results-score-divider" />
           <div className="results-score-item"><div className="results-score-label">{taskNum === 4 ? "Language control" : "Language"}</div><div className="results-score-value form">{formLevel}</div><div className="results-score-sub">{taskNum === 4 ? "in your rewrites" : "form level"}</div></div>
+          </>)}
         </div>
       </div>
 
@@ -116,6 +118,7 @@ export function ResultsDashboard({
             </div>
           )}
 
+          {form && form.dimensions && form.dimensions.length > 0 && (
           <div className="results-section animate-fade-up" style={{ animationDelay: taskNum === 4 ? "300ms" : "200ms" }}>
             <div className="results-section-title">{taskNum === 4 ? "Language control in your rewrites" : "How you communicate"}</div>
             {form?.dimensions?.map((dim, i) => (
@@ -162,6 +165,18 @@ export function ResultsDashboard({
                 )}
               </div>
             ))}
+          </div>
+
+          )}
+
+          <div className="results-section animate-fade-up" style={{ animationDelay: "350ms" }}>
+            <div className="results-section-title">Overall language report</div>
+            <p style={{ fontSize: ".8rem", color: "var(--s-text-muted)", lineHeight: 1.55, marginBottom: 10 }}>
+              Language ability (grammar, vocabulary, coherence) is now analysed across all tasks together once you&apos;ve finished.
+            </p>
+            <a href="/writing/report" className="btn-continue-new" style={{ textDecoration: "none", display: "inline-flex" }}>
+              See overall language report
+            </a>
           </div>
 
           {taskNum !== 4 && learnerNextSteps.length > 0 && (
