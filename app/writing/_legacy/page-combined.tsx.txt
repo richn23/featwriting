@@ -1,0 +1,1402 @@
+"use client";
+
+import { useState, useRef, useEffect, useCallback } from "react";
+import type { Message, LevelCluster, AzeMacro, TaskConfig, MacroResult, LevelResult, Diagnosis, FormDimension, FormAnalysis, WritingPrompt, ProbeTarget, ElicitationTarget, Phase } from "./_shared/types";
+import { LEVEL_LABELS, levelLabel, levelToPercent, barColor, getTime, TASK_META, softenLevel, levelToScore10, resizeTextareaToContent } from "./_shared/helpers";
+import { writingStyles } from "./_shared/styles";
+import { getLearnerCapabilitySections, getLearnerImprovementHints } from "./_shared/learnerCaps";
+import { ResultsDashboard } from "./_shared/ResultsDashboard";
+import { PhoneChat } from "./_shared/PhoneChat";
+
+const MIN_EXCHANGES = 5;
+/** Task 5: must align with MIN_T5_EXCHANGES_BEFORE_WRAP in writing-task5-chat/route.ts */
+const T5_MIN_EXCHANGES_BEFORE_CEILING = 6;
+/** Task 3: must align with MIN_EXCHANGES_BEFORE_WRAP in writing-task3-chat/route.ts */
+const T3_MIN_EXCHANGES_BEFORE_CEILING = 4;
+const T1_API = "/api/writing-chat";
+const T2_API = "/api/writing-task2-chat";
+const T3_API = "/api/writing-task3-chat";
+const T4_API = "/api/writing-task4-chat";
+const T5_API = "/api/writing-task5-chat";
+
+const FEAT_DEMO_ACCESS_KEY = "feat_demo_access";
+const FEAT_DEMO_ACCESS_CODE = "04031982";
+
+function hasDemoAccess(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(FEAT_DEMO_ACCESS_KEY) === "true";
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const styles = writingStyles;
+
+
+/** Final report: median CEFR level from a list (excludes "—"). */
+const medianCefrLevel = (levels: string[], order: string[]): string => {
+  const valid = levels.filter(l => l !== "—" && order.indexOf(l) > 0);
+  if (valid.length === 0) return "—";
+  const sorted = [...valid].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+};
+
+/** e.g. T1 | T1–T3 | T1, T4, T5 */
+const formatFinalReportTaskSource = (taskNums: number[]): string => {
+  const u = [...new Set(taskNums)].sort((a, b) => a - b);
+  if (u.length === 0) return "—";
+  if (u.length === 1) return `T${u[0]}`;
+  const consecutive = u.every((v, i) => i === 0 || v === u[i - 1] + 1);
+  if (consecutive) return `T${u[0]}–T${u[u.length - 1]}`;
+  return u.map(n => `T${n}`).join(", ");
+};
+
+const getConfirmedFnLevelForTask = (diag: Diagnosis | null, fn: string): string => {
+  if (!diag?.results) return "—";
+  const macros = diag.results.filter(r => r.fn === fn && r.result === "CONFIRMED");
+  if (macros.length === 0) return "—";
+  const lo = ["Below A1", "A1", "A2", "A2+", "B1", "B1+", "B2", "B2+", "C1", "C2"];
+  return macros.reduce((best, m) => (lo.indexOf(m.level) > lo.indexOf(best.level) ? m : best), macros[0]).level;
+};
+
+/** Aggregated improvement steps (same idea as legacy getNextSteps). */
+const getNextSteps = (
+  diagnoses: (Diagnosis | null)[],
+  formDims: { dimension: string; level: string; descriptor: string }[]
+): string[] => {
+  const steps: string[] = [];
+  const notDem = diagnoses.flatMap(d => d?.results?.filter(r => r.result === "NOT_DEMONSTRATED") ?? []);
+  if (notDem.length > 0 && notDem[0]?.claim) {
+    steps.push(`Work on: ${notDem[0].claim.toLowerCase()}`);
+  }
+  const weakDims = formDims.filter(d => levelToPercent(d.level) < 52);
+  for (const d of weakDims.slice(0, 2)) {
+    steps.push(`Improve ${d.dimension.toLowerCase()}: ${d.descriptor.toLowerCase()}`);
+  }
+  steps.push("Extend responses with reasons and examples");
+  steps.push("Use linking words to connect ideas");
+  return [...new Set(steps)].slice(0, 4);
+};
+
+const FINAL_REPORT_LEVEL_ORDER = ["—", "Below A1", "A1", "A2", "A2+", "B1", "B1+", "B2", "B2+", "C1", "C2"];
+
+const finalReportLevelColor = (lvl: string): string => {
+  const i = FINAL_REPORT_LEVEL_ORDER.indexOf(lvl);
+  if (i <= 0) return "var(--s-text-muted)";
+  if (i >= 7) return "var(--s-accent)";
+  if (i >= 5) return "#fbbf24";
+  return "var(--s-text-muted)";
+};
+
+const FINAL_REPORT_ALL_FUNCTIONS = ["Interactional", "Informing", "Narrating", "Expressing", "Arguing", "Mediating", "Directing"] as const;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Component
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export default function WritingTestPage() {
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState("");
+  const [accessCodeError, setAccessCodeError] = useState("");
+
+  const [t1Config, setT1Config] = useState<TaskConfig | null>(null);
+  const [t1Messages, setT1Messages] = useState<Message[]>([]);
+  const [t1Input, setT1Input] = useState("");
+  const [t1Processing, setT1Processing] = useState(false);
+  const [t1ExchangeCount, setT1ExchangeCount] = useState(0);
+  const [t1Diagnosis, setT1Diagnosis] = useState<Diagnosis | null>(null);
+  const [t1Form, setT1Form] = useState<FormAnalysis | null>(null);
+  const [t1Expanded, setT1Expanded] = useState<Set<string>>(new Set());
+  const [t1ShowTranscript, setT1ShowTranscript] = useState(false);
+  const t1DoneRef = useRef(false);
+  const [t1Stage, setT1Stage] = useState<number>(0);
+  const [candidateName, setCandidateName] = useState("");
+  const [t1StruggleCount, setT1StruggleCount] = useState(0);
+  const [t1StageExchangeCount, setT1StageExchangeCount] = useState(0);
+  const [t1ProbeTargets, setT1ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t1ProbeCount, setT1ProbeCount] = useState(0);
+  const t1ProbeDoneRef = useRef(false);
+  const [t1ElicitTargets, setT1ElicitTargets] = useState<ElicitationTarget[]>([]);
+  const [t1ElicitCount, setT1ElicitCount] = useState(0);
+  const t1ElicitDoneRef = useRef(false);
+
+  const [t2Config, setT2Config] = useState<TaskConfig | null>(null);
+  const [t2ScaffoldMsgs, setT2ScaffoldMsgs] = useState<Message[]>([]);
+  const [t2ScaffoldInput, setT2ScaffoldInput] = useState("");
+  const [t2ScaffoldProcessing, setT2ScaffoldProcessing] = useState(false);
+  const [t2ScaffoldCount, setT2ScaffoldCount] = useState(0);
+  const t2ScaffoldDoneRef = useRef(false);
+  const [t2Topic, setT2Topic] = useState<unknown | null>(null);
+  const [t2Prompt, setT2Prompt] = useState<WritingPrompt | null>(null);
+  const [t2WrittenText, setT2WrittenText] = useState("");
+  const [t2Diagnosis, setT2Diagnosis] = useState<Diagnosis | null>(null);
+  const [t2Form, setT2Form] = useState<FormAnalysis | null>(null);
+  const [t2Expanded, setT2Expanded] = useState<Set<string>>(new Set());
+  const [t2ShowTranscript, setT2ShowTranscript] = useState(false);
+  const [t2ShowWriting, setT2ShowWriting] = useState(false);
+
+  const [t3Config, setT3Config] = useState<TaskConfig | null>(null);
+  const [t3Messages, setT3Messages] = useState<Message[]>([]);
+  const [t3Input, setT3Input] = useState("");
+  const [t3Processing, setT3Processing] = useState(false);
+  const [t3ExchangeCount, setT3ExchangeCount] = useState(0);
+  const [t3ChosenTopic, setT3ChosenTopic] = useState<string | null>(null);
+  const [t3SwitchTopic, setT3SwitchTopic] = useState<string | null>(null);
+  const [t3Diagnosis, setT3Diagnosis] = useState<Diagnosis | null>(null);
+  const [t3Form, setT3Form] = useState<FormAnalysis | null>(null);
+  const [t3Expanded, setT3Expanded] = useState<Set<string>>(new Set());
+  const [t3ShowTranscript, setT3ShowTranscript] = useState(false);
+  const t3DoneRef = useRef(false);
+  const [t3ProbeTargets, setT3ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t3ProbeCount, setT3ProbeCount] = useState(0);
+  const t3ProbeDoneRef = useRef(false);
+  type TopicOption = { id: string; label: string; tier: string; prompt: string };
+
+  const [t4Config, setT4Config] = useState<TaskConfig | null>(null);
+  type StimulusItem = { id: string; level: string; type: string; label: string; instruction: string; stimulus: string; targetMacroIds: string[] };
+  const [t4Stimuli, setT4Stimuli] = useState<StimulusItem[]>([]);
+  const [t4CurrentIdx, setT4CurrentIdx] = useState(0);
+  const [t4Responses, setT4Responses] = useState<Record<string, string>>({});
+  const [t4Diagnosis, setT4Diagnosis] = useState<Diagnosis | null>(null);
+  const [t4Form, setT4Form] = useState<FormAnalysis | null>(null);
+  const [t4Expanded, setT4Expanded] = useState<Set<string>>(new Set());
+  const [t4ShowTranscript, setT4ShowTranscript] = useState(false);
+
+  const [t5Config, setT5Config] = useState<TaskConfig | null>(null);
+  type StimulusCardType = { id: string; name: string; tagline: string; rating: number; price: string; priceNote?: string; features: { icon: string; label: string; value: string }[]; highlight?: string };
+  type StimulusSetType = { id: string; category: string; categoryIcon: string; cardA: StimulusCardType; cardB: StimulusCardType };
+  const [t5StimulusSet, setT5StimulusSet] = useState<StimulusSetType | null>(null);
+  const [t5Messages, setT5Messages] = useState<Message[]>([]);
+  const [t5Input, setT5Input] = useState("");
+  const [t5Processing, setT5Processing] = useState(false);
+  const [t5ExchangeCount, setT5ExchangeCount] = useState(0);
+  const [t5Diagnosis, setT5Diagnosis] = useState<Diagnosis | null>(null);
+  const [t5Form, setT5Form] = useState<FormAnalysis | null>(null);
+  const [t5Expanded, setT5Expanded] = useState<Set<string>>(new Set());
+  const [t5ShowTranscript, setT5ShowTranscript] = useState(false);
+  const t5DoneRef = useRef(false);
+  const [t5ProbeTargets, setT5ProbeTargets] = useState<ProbeTarget[]>([]);
+  const [t5ProbeCount, setT5ProbeCount] = useState(0);
+  const t5ProbeDoneRef = useRef(false);
+
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/writing-descriptors").then(r => r.json()),
+      fetch("/api/writing-task2-descriptors").then(r => r.json()).catch(() => null),
+      fetch("/api/writing-task3-descriptors").then(r => r.json()).catch(() => null),
+      fetch("/api/writing-task4-descriptors").then(r => r.json()).catch(() => null),
+      fetch("/api/writing-task5-descriptors").then(r => r.json()).catch(() => null),
+    ]).then(([d1, d2, d3, d4, d5]) => {
+      setT1Config(d1);
+      if (d2) setT2Config(d2);
+      if (d3) setT3Config(d3);
+      if (d4) setT4Config(d4);
+      if (d5) setT5Config(d5);
+      setPhase("landing");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (phase === "loading" || phase === "landing") return;
+    if (!hasDemoAccess()) {
+      setAccessModalOpen(false);
+      setAccessCodeError("");
+      setPhase("landing");
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [t1Messages, t1Processing, t2ScaffoldMsgs, t2ScaffoldProcessing, t3Messages, t3Processing, t5Messages, t5Processing]);
+
+  const t1Transcript = useCallback(() =>
+    t1Messages.map(m => `${m.role === "assistant" ? "AI" : "Candidate"}: ${m.content}`).join("\n"),
+    [t1Messages]
+  );
+
+  const openBeginDemo = useCallback(() => {
+    if (hasDemoAccess()) {
+      setPhase("t1-briefing");
+      return;
+    }
+    setAccessCodeInput("");
+    setAccessCodeError("");
+    setAccessModalOpen(true);
+  }, []);
+
+  const submitDemoAccess = useCallback(
+    (e?: React.FormEvent) => {
+      e?.preventDefault();
+      if (accessCodeInput.trim() === FEAT_DEMO_ACCESS_CODE) {
+        localStorage.setItem(FEAT_DEMO_ACCESS_KEY, "true");
+        setAccessModalOpen(false);
+        setAccessCodeError("");
+        setAccessCodeInput("");
+        setPhase("t1-briefing");
+      } else {
+        setAccessCodeError("Invalid access code");
+      }
+    },
+    [accessCodeInput]
+  );
+
+  const startT1 = async () => {
+    t1DoneRef.current = false; setT1Stage(0); setT1StruggleCount(0); setT1StageExchangeCount(0); setPhase("t1-conversation"); setT1Processing(true);
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [], exchangeCount: 0, stage: 0, struggleCount: 0, stageExchangeCount: 0 }) });
+    const data = await res.json();
+    setT1Messages([{ role: "assistant", content: data.message }]); setT1Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT1 = async () => {
+    const text = t1Input.trim();
+    if (!text || t1Processing || t1DoneRef.current) return;
+    setT1Input(""); setT1Processing(true);
+    const userMsg: Message = { role: "user", content: text, stage: t1Stage };
+    const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
+    const nextCount = t1ExchangeCount + 1; setT1ExchangeCount(nextCount);
+    // Capture name from first user response (IDENTITY stage)
+    if (t1ExchangeCount === 0 && !candidateName) {
+      // Extract likely name: take the first 1-3 capitalised words, or the whole short response
+      const words = text.trim().split(/\s+/);
+      const name = words.length <= 3
+        ? text.trim().replace(/[.!,]$/g, "")
+        : words.filter(w => /^[A-Z]/.test(w)).slice(0, 2).join(" ") || words[0];
+      if (name) setCandidateName(name);
+    }
+    if (!t1Config) return;
+    if (nextCount >= (t1Config.meta.maxExchanges || 12)) { await finishT1(newMsgs, nextCount); return; }
+    const chatRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: newMsgs, exchangeCount: nextCount, stage: t1Stage, struggleCount: t1StruggleCount, stageExchangeCount: t1StageExchangeCount }) });
+    const data = await chatRes.json();
+    if (data.stage !== undefined) setT1Stage(data.stage);
+    if (data.struggleCount !== undefined) setT1StruggleCount(data.struggleCount);
+    if (data.stageExchangeCount !== undefined) setT1StageExchangeCount(data.stageExchangeCount);
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message, stage: data.stage }]; setT1Messages(updated);
+    if (data.ceilingReached && nextCount >= MIN_EXCHANGES) { t1DoneRef.current = true; setT1Processing(false); await runT1Diagnosis(updated); return; }
+    setT1Processing(false); setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const finishT1 = async (msgs: Message[], count: number) => {
+    t1DoneRef.current = true;
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, exchangeCount: count, wrapUp: true, stage: t1Stage, struggleCount: t1StruggleCount, stageExchangeCount: t1StageExchangeCount }) });
+    const data = await res.json();
+    const all = [...msgs, { role: "assistant" as const, content: data.message }];
+    setT1Messages(all); setT1Processing(false); await runT1Diagnosis(all);
+  };
+
+  const runT1Diagnosis = async (finalMsgs: Message[], isProbeRound = false, isElicitRound = false) => {
+    setPhase("t1-diagnosing");
+    try {
+      const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", probeRound: isProbeRound, elicitationRound: isElicitRound }) });
+      const data = await res.json();
+      if (data.diagnosis) { setT1Diagnosis(data.diagnosis); if (data.formAnalysis) setT1Form(data.formAnalysis); }
+
+      // Check if probing is needed (only on first diagnosis, not after probe/elicit)
+      if (!isProbeRound && !isElicitRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT1ProbeTargets(data.probeTargets);
+        setT1ProbeCount(0);
+        t1ProbeDoneRef.current = false;
+        setPhase("t1-probing");
+        const probeRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT1Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT1Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      // Check if elicitation is needed (after probe round or when no probes, but not after elicitation)
+      if (!isElicitRound && data.elicitationTargets && data.elicitationTargets.length > 0) {
+        setT1ElicitTargets(data.elicitationTargets);
+        setT1ElicitCount(0);
+        t1ElicitDoneRef.current = false;
+        setPhase("t1-eliciting");
+        const elicitRes = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "elicit", messages: finalMsgs, elicitationTargets: data.elicitationTargets, elicitationExchangeCount: 0 }) });
+        const elicitData = await elicitRes.json();
+        setT1Messages([...finalMsgs, { role: "assistant", content: elicitData.message }]);
+        setT1Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      setPhase("t1-results");
+    } catch { setPhase("t1-results"); }
+  };
+
+  const sendT1Probe = async () => {
+    const text = t1Input.trim();
+    if (!text || t1Processing || t1ProbeDoneRef.current) return;
+    setT1Input(""); setT1Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
+    const nextProbeCount = t1ProbeCount + 1; setT1ProbeCount(nextProbeCount);
+
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t1ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT1Messages(updated);
+
+    if (data.probeDone) {
+      t1ProbeDoneRef.current = true;
+      setT1Processing(false);
+      await runT1Diagnosis(updated, true);
+      return;
+    }
+    setT1Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT1Elicit = async () => {
+    const text = t1Input.trim();
+    if (!text || t1Processing || t1ElicitDoneRef.current) return;
+    setT1Input(""); setT1Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t1Messages, userMsg]; setT1Messages(newMsgs);
+    const nextElicitCount = t1ElicitCount + 1; setT1ElicitCount(nextElicitCount);
+
+    const res = await fetch(T1_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "elicit", messages: newMsgs, elicitationTargets: t1ElicitTargets, elicitationExchangeCount: nextElicitCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT1Messages(updated);
+
+    if (data.elicitDone) {
+      t1ElicitDoneRef.current = true;
+      setT1Processing(false);
+      await runT1Diagnosis(updated, false, true);
+      return;
+    }
+    setT1Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  // Build a short context snippet from Task 1 — what the candidate told us about themselves
+  const t1ContextSnippet = useCallback(() => {
+    const userMsgs = t1Messages.filter(m => m.role === "user").map(m => m.content);
+    // Take first 3 user responses (IDENTITY + early stages) — enough for context, not overwhelming
+    return userMsgs.slice(0, 3).join(" | ").slice(0, 300);
+  }, [t1Messages]);
+
+  const startT2Scaffolding = async () => {
+    t2ScaffoldDoneRef.current = false; setPhase("t2-scaffolding"); setT2ScaffoldProcessing(true);
+    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: [], exchangeCount: 0, candidateName, task1Level: t1Diagnosis?.diagnosedLevel, task1Context: t1ContextSnippet() }) });
+    const data = await res.json();
+    if (data.topic) setT2Topic(data.topic);
+    setT2ScaffoldMsgs([{ role: "assistant", content: data.message }]); setT2ScaffoldProcessing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT2Scaffold = async () => {
+    const text = t2ScaffoldInput.trim();
+    if (!text || t2ScaffoldProcessing || t2ScaffoldDoneRef.current) return;
+    setT2ScaffoldInput(""); setT2ScaffoldProcessing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t2ScaffoldMsgs, userMsg]; setT2ScaffoldMsgs(newMsgs);
+    const nextCount = t2ScaffoldCount + 1; setT2ScaffoldCount(nextCount);
+    const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "scaffold", messages: newMsgs, exchangeCount: nextCount, candidateName, task1Level: t1Diagnosis?.diagnosedLevel, task1Context: t1ContextSnippet(), topic: t2Topic }) });
+    const data = await res.json();
+    if (data.topic) setT2Topic(data.topic);
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT2ScaffoldMsgs(updated);
+    if (data.scaffoldDone || nextCount >= 4) { t2ScaffoldDoneRef.current = true; setT2ScaffoldProcessing(false); await generateT2Prompt(updated); return; }
+    setT2ScaffoldProcessing(false); setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const generateT2Prompt = async (scaffoldMsgs: Message[]) => {
+    setPhase("t2-generating-prompt");
+    try {
+      const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generate-prompt", messages: scaffoldMsgs, task1Level: t1Diagnosis?.diagnosedLevel, topic: t2Topic }) });
+      const data = await res.json();
+      if (data.prompt) setT2Prompt(data.prompt);
+      setPhase("t2-writing"); setTimeout(() => textareaRef.current?.focus(), 200);
+    } catch { setPhase("t2-writing"); }
+  };
+
+  const submitT2Writing = async () => {
+    if (!t2WrittenText.trim()) return;
+    setPhase("t2-diagnosing");
+    try {
+      const res = await fetch(T2_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "diagnose", writingResponse: t2WrittenText, scaffoldMessages: t2ScaffoldMsgs, topic: t2Topic }) });
+      const data = await res.json();
+      if (data.diagnosis) { setT2Diagnosis(data.diagnosis); if (data.formAnalysis) setT2Form(data.formAnalysis); }
+      setPhase("t2-results");
+    } catch { setPhase("t2-results"); }
+  };
+
+  const startT3 = async (topicId: string) => {
+    t3DoneRef.current = false; setT3ChosenTopic(topicId);
+    const prevLevel = t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "A2";
+    const levelNum = levelToPercent(prevLevel);
+    const switchTier = levelNum >= 72 ? "abstract" : "broader";
+    const options = (t3Config as unknown as { topicOptions?: TopicOption[] })?.topicOptions ?? [];
+    const switchOptions = options.filter((t: TopicOption) => t.tier === switchTier && t.id !== topicId);
+    const picked = switchOptions.length > 0 ? switchOptions[Math.floor(Math.random() * switchOptions.length)] : null;
+    if (picked) setT3SwitchTopic(picked.id);
+    setPhase("t3-conversation"); setT3Processing(true);
+    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, chosenTopic: topicId, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel, candidateName, task1Context: t1ContextSnippet() }) });
+    const data = await res.json();
+    setT3Messages([{ role: "assistant", content: data.message }]); setT3Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT3 = async () => {
+    const text = t3Input.trim();
+    if (!text || t3Processing || t3DoneRef.current) return;
+    setT3Input(""); setT3Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t3Messages, userMsg]; setT3Messages(newMsgs);
+    const nextCount = t3ExchangeCount + 1; setT3ExchangeCount(nextCount);
+    const maxEx = t3Config?.meta?.maxExchanges || 14;
+    if (nextCount >= maxEx) { await finishT3(newMsgs, nextCount); return; }
+    const shouldSwitch = t3SwitchTopic && nextCount >= 6 && nextCount <= 8;
+    const chatRes = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, chosenTopic: t3ChosenTopic, switchTopic: shouldSwitch ? t3SwitchTopic : undefined, task1Level: t1Diagnosis?.diagnosedLevel, task2Level: t2Diagnosis?.diagnosedLevel, candidateName, task1Context: t1ContextSnippet() }) });
+    const data = await chatRes.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT3Messages(updated);
+    if (data.ceilingReached && nextCount >= T3_MIN_EXCHANGES_BEFORE_CEILING) { t3DoneRef.current = true; setT3Processing(false); await runT3Diagnosis(updated); return; }
+    setT3Processing(false); setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const finishT3 = async (msgs: Message[], count: number) => {
+    t3DoneRef.current = true;
+    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: msgs, exchangeCount: count, wrapUp: true, chosenTopic: t3ChosenTopic }) });
+    const data = await res.json();
+    const all = [...msgs, { role: "assistant" as const, content: data.message }];
+    setT3Messages(all); setT3Processing(false); await runT3Diagnosis(all);
+  };
+
+  const runT3Diagnosis = async (finalMsgs: Message[], isProbeRound = false) => {
+    setPhase("t3-diagnosing");
+    try {
+      const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", probeRound: isProbeRound, chosenTopicId: t3ChosenTopic, switchTopicId: t3SwitchTopic }) });
+      const data = await res.json();
+      if (data.diagnosis) { setT3Diagnosis(data.diagnosis); if (data.formAnalysis) setT3Form(data.formAnalysis); }
+
+      if (!isProbeRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT3ProbeTargets(data.probeTargets);
+        setT3ProbeCount(0);
+        t3ProbeDoneRef.current = false;
+        setPhase("t3-probing");
+        const probeRes = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT3Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT3Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      setPhase("t3-results");
+    } catch { setPhase("t3-results"); }
+  };
+
+  const sendT3Probe = async () => {
+    const text = t3Input.trim();
+    if (!text || t3Processing || t3ProbeDoneRef.current) return;
+    setT3Input(""); setT3Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t3Messages, userMsg]; setT3Messages(newMsgs);
+    const nextProbeCount = t3ProbeCount + 1; setT3ProbeCount(nextProbeCount);
+
+    const res = await fetch(T3_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t3ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT3Messages(updated);
+
+    if (data.probeDone) {
+      t3ProbeDoneRef.current = true;
+      setT3Processing(false);
+      await runT3Diagnosis(updated, true);
+      return;
+    }
+    setT3Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const startT4 = async () => {
+    setPhase("t4-loading-stimuli");
+    const prevLevel = t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "B1";
+    const res = await fetch(T4_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get-stimuli", prevLevel }) });
+    const data = await res.json();
+    if (data.stimuli) { setT4Stimuli(data.stimuli); setT4CurrentIdx(0); setT4Responses({}); setPhase("t4-challenges"); }
+  };
+
+  const t4CurrentStimulus = t4Stimuli[t4CurrentIdx] || null;
+  const t4CurrentResponse = t4CurrentStimulus ? (t4Responses[t4CurrentStimulus.id] || "") : "";
+  const t4AllDone = t4Stimuli.length > 0 && t4Stimuli.every(s => (t4Responses[s.id] || "").trim().length > 5);
+
+  const submitT4 = async () => {
+    if (!t4AllDone) return;
+    setPhase("t4-diagnosing");
+    const responses = t4Stimuli.map(s => ({ stimulusId: s.id, instruction: s.instruction, stimulus: s.stimulus, response: t4Responses[s.id] || "" }));
+    try {
+      const prevLevel = t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "";
+      const res = await fetch(T4_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "diagnose", responses, candidateLevel: prevLevel }) });
+      const data = await res.json();
+      if (data.diagnosis) { setT4Diagnosis(data.diagnosis); if (data.formAnalysis) setT4Form(data.formAnalysis); }
+      setPhase("t4-results");
+    } catch { setPhase("t4-results"); }
+  };
+
+  const startT5 = async () => {
+    t5DoneRef.current = false; setPhase("t5-loading");
+    const prevLevel = t4Diagnosis?.diagnosedLevel || t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "B1";
+    const stimRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "get-stimulus", prevLevel }) });
+    const stimData = await stimRes.json();
+    if (stimData.stimulusSet) setT5StimulusSet(stimData.stimulusSet);
+    const chatRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: [], exchangeCount: 0, stimulusSetId: stimData.stimulusSet?.id, prevLevel, candidateName, task1Context: t1ContextSnippet() }) });
+    const chatData = await chatRes.json();
+    setT5Messages([{ role: "assistant", content: chatData.message }]); setT5ExchangeCount(0);
+    setPhase("t5-conversation"); setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const sendT5 = async () => {
+    const text = t5Input.trim();
+    if (!text || t5Processing || t5DoneRef.current) return;
+    setT5Input(""); setT5Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t5Messages, userMsg]; setT5Messages(newMsgs);
+    const nextCount = t5ExchangeCount + 1; setT5ExchangeCount(nextCount);
+    const maxEx = t5Config?.meta?.maxExchanges || 12;
+    if (nextCount >= maxEx) { await finishT5(newMsgs, nextCount); return; }
+    const prevLevel5 = t4Diagnosis?.diagnosedLevel || t3Diagnosis?.diagnosedLevel || t2Diagnosis?.diagnosedLevel || t1Diagnosis?.diagnosedLevel || "B1";
+    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: newMsgs, exchangeCount: nextCount, stimulusSetId: t5StimulusSet?.id, prevLevel: prevLevel5, candidateName, task1Context: t1ContextSnippet() }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT5Messages(updated);
+    if (data.ceilingReached && nextCount >= T5_MIN_EXCHANGES_BEFORE_CEILING) { t5DoneRef.current = true; setT5Processing(false); await runT5Diagnosis(updated); return; }
+    setT5Processing(false); setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const finishT5 = async (msgs: Message[], count: number) => {
+    t5DoneRef.current = true;
+    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "chat", messages: msgs, exchangeCount: count, wrapUp: true, stimulusSetId: t5StimulusSet?.id }) });
+    const data = await res.json();
+    const all = [...msgs, { role: "assistant" as const, content: data.message }];
+    setT5Messages(all); setT5Processing(false); await runT5Diagnosis(all);
+  };
+
+  const runT5Diagnosis = async (finalMsgs: Message[], isProbeRound = false) => {
+    setPhase("t5-diagnosing");
+    try {
+      const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: finalMsgs, action: "diagnose", stimulusSetId: t5StimulusSet?.id, probeRound: isProbeRound }) });
+      const data = await res.json();
+      if (data.diagnosis) { setT5Diagnosis(data.diagnosis); if (data.formAnalysis) setT5Form(data.formAnalysis); }
+
+      if (!isProbeRound && data.probeTargets && data.probeTargets.length > 0) {
+        setT5ProbeTargets(data.probeTargets);
+        setT5ProbeCount(0);
+        t5ProbeDoneRef.current = false;
+        setPhase("t5-probing");
+        const probeRes = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: finalMsgs, probeTargets: data.probeTargets, probeExchangeCount: 0 }) });
+        const probeData = await probeRes.json();
+        setT5Messages([...finalMsgs, { role: "assistant", content: probeData.message }]);
+        setT5Processing(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      setPhase("t5-results");
+    } catch { setPhase("t5-results"); }
+  };
+
+  const sendT5Probe = async () => {
+    const text = t5Input.trim();
+    if (!text || t5Processing || t5ProbeDoneRef.current) return;
+    setT5Input(""); setT5Processing(true);
+    const userMsg: Message = { role: "user", content: text };
+    const newMsgs = [...t5Messages, userMsg]; setT5Messages(newMsgs);
+    const nextProbeCount = t5ProbeCount + 1; setT5ProbeCount(nextProbeCount);
+
+    const res = await fetch(T5_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "probe", messages: newMsgs, probeTargets: t5ProbeTargets, probeExchangeCount: nextProbeCount }) });
+    const data = await res.json();
+    const updated = [...newMsgs, { role: "assistant" as const, content: data.message }]; setT5Messages(updated);
+
+    if (data.probeDone) {
+      t5ProbeDoneRef.current = true;
+      setT5Processing(false);
+      await runT5Diagnosis(updated, true);
+      return;
+    }
+    setT5Processing(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const renderT5Card = (card: StimulusCardType) => (
+    <div className="t5-card" key={card.id}>
+      <div className="t5-card-header"><span className="t5-card-name">{card.name}</span><span className="t5-card-stars">{"★".repeat(card.rating)}{"☆".repeat(5 - card.rating)}</span></div>
+      <div className="t5-card-tagline">{card.tagline}</div>
+      <div className="t5-card-price">{card.price}</div>
+      {card.priceNote && <div className="t5-card-price-note">{card.priceNote}</div>}
+      <div className="t5-card-features">{card.features.map((f, i) => (<div className="t5-card-feature" key={i}><span className="t5-card-feature-icon">{f.icon}</span><span className="t5-card-feature-label">{f.label}</span><span>{f.value}</span></div>))}</div>
+      {card.highlight && <div className="t5-card-highlight">{card.highlight}</div>}
+    </div>
+  );
+
+
+  const wordCount = t2WrittenText.trim().split(/\s+/).filter(w => w.length > 0).length;
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  const S = <style dangerouslySetInnerHTML={{ __html: styles }} />;
+  // Floating skip button — always jumps to final report for quick testing
+  const skippablePhases = new Set<Phase>([
+    "t1-conversation", "t1-probing", "t1-eliciting", "t1-diagnosing", "t1-results",
+    "t2-scaffolding", "t2-generating-prompt", "t2-writing", "t2-diagnosing", "t2-results",
+    "t3-topic-select", "t3-conversation", "t3-probing", "t3-diagnosing", "t3-results",
+    "t4-loading-stimuli", "t4-challenges", "t4-diagnosing", "t4-results",
+    "t5-loading", "t5-conversation", "t5-probing", "t5-diagnosing", "t5-results",
+  ]);
+
+  const wrap = (children: React.ReactNode) => (
+    <div className="stakeholder-theme">
+      {S}{children}
+      {skippablePhases.has(phase) && (
+        <button type="button" className="skip-task-float" onClick={() => setPhase("final-report")}>
+          Skip to Report →
+        </button>
+      )}
+    </div>
+  );
+
+  if (phase === "loading" || !t1Config) return wrap(<main className="diagnosing-container"><div className="spinner" style={{ margin: "0 auto" }} /></main>);
+
+  /* ── LANDING PAGE ──────────────────────────────────────────────────── */
+  if (phase === "landing") return wrap(
+    <div className="landing-page">
+      {/* Nav */}
+      <nav className="landing-nav">
+        <div className="landing-nav-logo">FEAT <em>Writing</em></div>
+        <button type="button" onClick={openBeginDemo} className="landing-nav-cta">Begin Test Demo</button>
+      </nav>
+
+      {/* Hero */}
+      <section className="landing-hero animate-fade-up">
+        <div className="landing-hero-eyebrow">FEAT Writing Test</div>
+        <h1 className="landing-hero-title">Function First.<br/><em>Form Second.</em></h1>
+        <p className="landing-hero-anchor">A function-based writing assessment platform.</p>
+        <p className="landing-hero-hook">
+          A mechanic is assessed by fixing an engine. A chef by preparing a dish. FEAT assesses writing the same way — through what learners actually do with language, not whether they can produce the right kind of text.
+        </p>
+        <p className="landing-hero-hook" style={{ fontSize: ".9rem", color: "var(--s-text-muted)", opacity: 0.8, marginTop: "-8px" }}>
+          It tests communicative function, not genre.
+        </p>
+        <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
+          Begin Test Demo
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </section>
+
+      {/* The problem */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "100ms" }}>
+        <div className="landing-section-label">The problem</div>
+        <div className="landing-section-body">
+          <p>Most writing tests ask candidates to produce a genre: an essay, a report, a formal letter. Can you produce the right kind of text? Format. Structure. Register. Grammar. Vocabulary. They measure the language you use.</p>
+          <p>This captures important skills, but only part of what it means to communicate in writing.</p>
+          <p>CEFR descriptors are function-based: can the learner inform, express, argue, interact? But many CEFR-aligned assessments are still built around genre tasks.</p>
+          <p>Consider the extremes. A learner can have poor grammar and still make a point clearly. Another can write near-perfect sentences that communicate nothing useful. The language you use and what you can do with language are related — but they are not the same thing.</p>
+          <p>We know jagged profiles exist. The strong communicator who makes errors in every sentence. The weak communicator with perfect accuracy. Real learners don&apos;t sit neatly on one side of a line — and an assessment that collapses everything into a single score will always struggle to show you which one you&apos;re dealing with. On a traditional test, they often look the same.</p>
+          <p className="landing-section-pull">We test the format. We don&apos;t always test the communication.</p>
+
+          {/* Comparison diagram */}
+          <div className="landing-compare">
+            <div className="landing-compare-col">
+              <div className="landing-compare-heading">What CEFR says</div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">What is measured</div>
+                <div className="landing-compare-row-value">Communicative function — can the learner inform, narrate, argue?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">The question being asked</div>
+                <div className="landing-compare-row-value">What do you need to do? Explain, persuade, clarify, respond.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Language</div>
+                <div className="landing-compare-row-value">A separate dimension — how well does the language serve the purpose?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Scoring basis</div>
+                <div className="landing-compare-row-value">Evidence of function — did the communication work?</div>
+              </div>
+            </div>
+            <div className="landing-compare-col">
+              <div className="landing-compare-heading">What most assessments do</div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">What is measured</div>
+                <div className="landing-compare-row-value">Genre and language accuracy — right text type, correct language use.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">The question being asked</div>
+                <div className="landing-compare-row-value">What should it look like? Essay, report, formal letter, email.</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Language</div>
+                <div className="landing-compare-row-value">Grammar, vocabulary, punctuation — how accurate is the language?</div>
+              </div>
+              <div className="landing-compare-row">
+                <div className="landing-compare-row-label">Scoring basis</div>
+                <div className="landing-compare-row-value">Task achievement is considered, but language correctness drives the level.</div>
+              </div>
+            </div>
+            <div className="landing-compare-gap">
+              Most assessments ask: how accurate is the language? FEAT asks: did the communication work?
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* The approach */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "200ms" }}>
+        <div className="landing-section-label">The approach</div>
+        <div className="landing-section-body">
+          <p>FEAT starts from what the learner is trying to do with language. Not a single static prompt — live, back-and-forth tasks that demand real communication.</p>
+          <div className="landing-contrast">
+            <p className="not">Instead of: write an essay about technology,</p>
+            <p className="but">FEAT asks: explain an idea to someone who doesn&apos;t understand it.</p>
+          </div>
+          <p>The candidate may need to justify a view when challenged. Clarify when misunderstood. Adapt when the situation shifts. The AI responds, follows up, pushes back, and sometimes misunderstands on purpose — because real communication requires all of that.</p>
+          <p>Level comes from patterns of evidence across the full session. Not one task. Not one score. A profile.</p>
+        </div>
+      </section>
+
+      {/* How it&apos;s controlled */}
+      <section className="landing-section animate-fade-up" style={{ animationDelay: "250ms" }}>
+        <div className="landing-section-label">How it&apos;s controlled</div>
+        <div className="landing-section-body">
+          <p>Every task follows a defined structure. The system varies prompts and challenges within set parameters — so each session is different, but difficulty remains comparable.</p>
+          <p>Evidence is gathered across multiple tasks and mapped directly to CEFR and GSE descriptors. Scoring is based on what candidates demonstrate — not single responses, not impressions, not a holistic guess. Confirmed evidence or nothing.</p>
+        </div>
+      </section>
+
+      {/* What you get */}
+      <div className="landing-split-section animate-fade-up" style={{ animationDelay: "300ms" }}>
+        <div className="landing-split-left">
+          <div className="landing-split-block-label">What you get</div>
+          <div className="landing-split-block-title" style={{ fontFamily: "'DM Serif Display', serif", fontSize: "1.6rem", fontWeight: 400, color: "#E6EDF3", marginBottom: "16px", letterSpacing: "-.02em" }}>Two outputs, not one score</div>
+          <div className="landing-split-block-body">
+            <p>Most assessments collapse everything into a single number. FEAT separates two things that are fundamentally different — because they are.</p>
+          </div>
+          <div className="landing-outputs">
+            <div className="landing-output-item">
+              <div className="landing-output-item-label fn">Function profile</div>
+              <div className="landing-output-item-desc">What the learner can do — their ability to interact, inform, argue, narrate, mediate, and direct. Each function scored independently.</div>
+            </div>
+            <div className="landing-output-item">
+              <div className="landing-output-item-label form">Language profile</div>
+              <div className="landing-output-item-desc">How well they do it — grammar control, vocabulary range, discourse management, and mechanics. With evidence, plain-English explanation, and specific advice for improvement.</div>
+            </div>
+          </div>
+        </div>
+        <div className="landing-split-right">
+          <div className="landing-split-block">
+            <div className="landing-split-block-label">How it works</div>
+            <div className="landing-split-block-title">Grounded in established frameworks</div>
+            <div className="landing-split-block-body">
+              <p>FEAT starts from communicative descriptors in CEFR and GSE. It groups them into broader purposes — informing, arguing, mediating, interacting — and turns them into behaviours that can be tested through live interaction.</p>
+              <p>During a session, the system gathers evidence across these areas and maps performance to CEFR levels. You don&apos;t get one overall score. You get a profile of what the learner can and cannot do.</p>
+            </div>
+          </div>
+          <div className="landing-split-block">
+            <div className="landing-split-block-label">Scope</div>
+            <div className="landing-split-block-title">What this does and doesn&apos;t replace</div>
+            <div className="landing-split-block-body">
+              <p>Academic writing, professional genres, and extended composition remain important. They need their own tools.</p>
+              <p>For general English, testing purpose and communication in context offers a flexible, CEFR-aligned way to diagnose ability — without depending on fixed text types alone.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Task structure */}
+      <div className="landing-tasks animate-fade-up" style={{ animationDelay: "350ms" }}>
+        <div className="landing-tasks-label">Test structure</div>
+        <div className="landing-tasks-title">Five tasks, one session</div>
+        <div className="landing-tasks-intro">Each task tests different communicative demands. Together, they build a complete picture of what the learner can do.</div>
+        <div className="landing-task-grid">
+          {[
+            { num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat", desc: "Live text chat with an AI examiner. It adapts in real time — probing ability, testing how the candidate interacts and informs." },
+            { num: "T2", cls: "t2", fn: "Inform & Narrate", name: "Extended Writing", desc: "Scaffolded prompt followed by extended response. Tests clarity, sequencing, and the ability to develop detail." },
+            { num: "T3", cls: "t3", fn: "Express & Argue", name: "Opinion Chat", desc: "Interactive discussion where the AI challenges, disagrees, and pushes for justification. Can you hold your position?" },
+            { num: "T4", cls: "t4", fn: "Rephrase & Adjust", name: "Pragmatic Control", desc: "Rewrite a text for a different audience or purpose. Tests paraphrasing, register control, and linguistic flexibility." },
+            { num: "T5", cls: "t5", fn: "Compare & Advise", name: "Mediation", desc: "Evaluate options, explain differences, recommend a choice, and adapt advice when conditions change." },
+          ].map(t => (
+            <div key={t.num} className="landing-task-card">
+              <div className={`landing-task-num ${t.cls}`}>{t.num}</div>
+              <div className="landing-task-fn">{t.fn}</div>
+              <div className="landing-task-name">{t.name}</div>
+              <div className="landing-task-desc">{t.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Final CTA */}
+      <div className="landing-final-cta animate-fade-up" style={{ animationDelay: "400ms" }}>
+        <h2 className="landing-final-cta-title"><em>Functional Evidence-based</em><br/>Assessment Tasks</h2>
+        <p className="landing-final-cta-sub">The name says what it does.</p>
+        <button type="button" onClick={openBeginDemo} className="landing-hero-btn">
+          Begin Test Demo
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+
+      {/* Footer */}
+      <footer className="landing-footer">
+        <div className="landing-footer-logo">FEAT <em>Writing</em></div>
+        <div className="landing-footer-note">Functional Evidence-based Assessment Tasks · Prototype</div>
+      </footer>
+
+      {accessModalOpen && (
+        <div
+          className="access-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="access-modal-title"
+          onClick={e => {
+            if (e.target === e.currentTarget) setAccessModalOpen(false);
+          }}
+        >
+          <div className="access-modal" onClick={e => e.stopPropagation()}>
+            <p id="access-modal-title" className="access-modal-msg">
+              This demo is currently limited to invited reviewers.
+            </p>
+            <form className="access-modal-form" onSubmit={submitDemoAccess}>
+              <input
+                type="text"
+                className="access-modal-input"
+                value={accessCodeInput}
+                onChange={e => {
+                  setAccessCodeInput(e.target.value);
+                  if (accessCodeError) setAccessCodeError("");
+                }}
+                autoComplete="off"
+                aria-invalid={!!accessCodeError}
+                aria-describedby={accessCodeError ? "access-modal-err" : undefined}
+                autoFocus
+              />
+              {accessCodeError ? (
+                <p id="access-modal-err" className="access-modal-error" role="alert">
+                  {accessCodeError}
+                </p>
+              ) : null}
+              <button type="submit" className="landing-hero-btn access-modal-submit">
+                Submit
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  /* ── TASK 1: Briefing ──────────────────────────────────────────────── */
+  if (phase === "t1-briefing") return wrap(
+    <main className="split-briefing-container">
+      <div className="split-briefing-inner animate-fade-up">
+        <div className="sb-left">
+          <div className="sb-badge">✍️ Writing Test · Task 1</div>
+          <h1 className="sb-title">Diagnostic <em>Chat</em></h1>
+          <p className="sb-subtitle">Text chat · 3–4 minutes</p>
+          <div className="sb-section">
+            <div className="sb-section-title">What you&apos;ll do</div>
+            <div className="sb-section-body">You&apos;ll have a short text conversation with the AI examiner — similar to messaging apps like WhatsApp or iMessage.<br /><br />It starts simple (your name, where you&apos;re from) and becomes more challenging based on how you respond.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">How the AI will behave</div>
+            <div className="sb-section-body">The AI adapts to your level.<ul><li>If you&apos;re comfortable, it will ask more challenging questions.</li><li>If something is difficult, it will adjust and support you.</li></ul><br />The aim is to create a natural interaction where you can show how you communicate in writing.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">How your responses are evaluated</div>
+            <div className="sb-section-body">Your responses are evaluated based on what you are able to communicate.<br /><br />The system looks for clear evidence of your ability across different types of communication.</div>
+          </div>
+          <div className="sb-reassurance">There are no right or wrong answers — the goal is to see how you communicate.</div>
+          <button onClick={startT1} className="sb-start-btn">Start Chat <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+          <button type="button" className="skip-task-btn" onClick={() => setPhase("t2-briefing")}>Skip this task →</button>
+        </div>
+        <div className="sb-right">
+          <div className="sb-right-label">Stakeholder Context</div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why this task exists</div><div className="sb-right-section-body">This task assesses written interaction and informing functions in a controlled but flexible environment. Rather than a fixed text type, it creates an adaptive conversation where communicative ability can emerge naturally.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why a chat format</div><div className="sb-right-section-body">Interaction introduces elements that static writing tasks cannot:<ul><li>follow-up questions</li><li>clarification</li><li>adjustment of meaning</li><li>breakdown and repair</li></ul></div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How ability is elicited</div><div className="sb-right-section-body">The AI dynamically adjusts difficulty — moving upward when the candidate responds comfortably, stabilising or simplifying when they struggle.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">CEFR alignment</div><div className="sb-right-section-body">The task targets CEFR-aligned communicative functions — particularly interaction and informing. Evidence is collected across the exchange and mapped to CEFR descriptors.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How it is scored</div><div className="sb-right-section-body">Performance is evaluated through observable evidence. Each descriptor is marked as:<div className="sb-verdict-row"><div className="sb-verdict"><span className="sb-verdict-tag can">Confirmed</span> demonstrated clearly under demand</div><div className="sb-verdict"><span className="sb-verdict-tag not-yet">Not Demonstrated</span> not consistently evidenced</div></div></div></div>
+        </div>
+      </div>
+    </main>
+  );
+
+  if (phase === "t1-conversation") return wrap(<PhoneChat label="Writing Examiner" subtitle="Task 1 · Diagnostic Chat" messages={t1Messages} input={t1Input} setInput={setT1Input} processing={t1Processing} doneRef={t1DoneRef} sendFn={sendT1} exchangeCount={t1ExchangeCount} maxExchanges={t1Config.meta.maxExchanges || 12} chatEndRef={chatEndRef} inputRef={inputRef} onFinishEarly={() => { void finishT1(t1Messages, t1ExchangeCount); }} />);
+  if (phase === "t1-probing") return wrap(<PhoneChat label="Writing Examiner" subtitle="Task 1 · Follow-up Questions" messages={t1Messages} input={t1Input} setInput={setT1Input} processing={t1Processing} doneRef={t1ProbeDoneRef} sendFn={sendT1Probe} exchangeCount={t1ProbeCount} maxExchanges={3} chatEndRef={chatEndRef} inputRef={inputRef} />);
+  if (phase === "t1-eliciting") return wrap(<PhoneChat label="Writing Examiner" subtitle="Task 1 · A Few More Questions" messages={t1Messages} input={t1Input} setInput={setT1Input} processing={t1Processing} doneRef={t1ElicitDoneRef} sendFn={sendT1Elicit} exchangeCount={t1ElicitCount} maxExchanges={3} chatEndRef={chatEndRef} inputRef={inputRef} />);
+  if (phase === "t1-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing function and language…</p></div></main>);
+  if (phase === "t1-results") return wrap(<main className="results-page"><ResultsDashboard taskLabel="Task 1 · Diagnostic Results" taskNum={1} config={t1Config} diagnosis={t1Diagnosis} form={t1Form} expanded={t1Expanded} setExpanded={setT1Expanded} showTranscript={t1ShowTranscript} setShowTranscript={setT1ShowTranscript} messages={t1Messages} nextAction={() => setPhase("t2-briefing")} nextLabel="Continue to Task 2 →" /></main>);
+
+  /* ── TASK 2 ────────────────────────────────────────────────────────── */
+  if (phase === "t2-briefing") return wrap(
+    <main className="split-briefing-container split-briefing-task2">
+      <div className="split-briefing-inner animate-fade-up">
+        <div className="sb-left">
+          <div className="sb-badge">✍️ Writing Test · Task 2</div>
+          <h1 className="sb-title">Inform &amp; <em>Narrate</em></h1>
+          <p className="sb-subtitle">Two phases · ~5 minutes</p>
+          <div className="sb-section">
+            <div className="sb-section-title">What you&apos;ll do</div>
+            <div className="sb-section-body">This task has two parts. First, you&apos;ll have a short chat with the AI to warm up your ideas. Then you&apos;ll write a longer answer on your own.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">Phase 1 — Short chat</div>
+            <div className="sb-section-body">The AI will ask a few quick questions to help you think. This part is <strong>not</strong> part of your result — relax, explore ideas, and don&apos;t worry about mistakes.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">Phase 2 — Your writing</div>
+            <div className="sb-section-body">You&apos;ll get a writing prompt based on what you discussed. Take your time and write in your own words — include detail where you can.</div>
+          </div>
+          <div className="sb-reassurance">Only your extended writing in phase 2 is reviewed — the warm-up chat is there to help you, not to test you.</div>
+          <button onClick={startT2Scaffolding} className="sb-start-btn">Start Task 2 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+          <button type="button" className="skip-task-btn" onClick={() => setPhase("t3-briefing")}>Skip this task →</button>
+        </div>
+        <div className="sb-right">
+          <div className="sb-right-label">Stakeholder Context</div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why this task exists</div><div className="sb-right-section-body">It tests whether candidates can <strong>inform</strong> and <strong>narrate</strong> in writing — giving clear information and telling a story or experience in connected text.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why scaffold then write</div><div className="sb-right-section-body">A short chat before writing reduces &quot;cold start&quot; noise. Candidates who plan and warm up often produce writing that better reflects their real ability than a single prompt with no preparation.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How ability is elicited</div><div className="sb-right-section-body">The chat surfaces ideas and vocabulary; the extended response then shows whether they can sustain informing and narrating across a longer piece.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How it is scored</div><div className="sb-right-section-body">The written response is diagnosed against the relevant abilities. Each is marked as:<div className="sb-verdict-row"><div className="sb-verdict"><span className="sb-verdict-tag can">Confirmed</span> clearly shown in the writing</div><div className="sb-verdict"><span className="sb-verdict-tag not-yet">Not demonstrated</span> not sufficiently evidenced</div></div></div></div>
+        </div>
+      </div>
+    </main>
+  );
+  if (phase === "t2-scaffolding") return wrap(<PhoneChat label="Writing Examiner" subtitle="Task 2 · Phase 1: Think" messages={t2ScaffoldMsgs} input={t2ScaffoldInput} setInput={setT2ScaffoldInput} processing={t2ScaffoldProcessing} doneRef={t2ScaffoldDoneRef} sendFn={sendT2Scaffold} exchangeCount={t2ScaffoldCount} maxExchanges={4} notice="⚡ Scaffolding — not assessed" chatEndRef={chatEndRef} inputRef={inputRef} />);
+  if (phase === "t2-generating-prompt") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Creating your writing prompt…</p></div></main>);
+  if (phase === "t2-writing") return wrap(
+    <main className="writing-page"><div className="writing-frame animate-slide-up">
+      <div className="writing-prompt-card">
+        <div className="writing-prompt-tag">Task 2 — Writing Prompt</div>
+        <h2 className="writing-prompt-title">{t2Prompt?.promptTitle ?? "Write about your experience"}</h2>
+        <p className="writing-prompt-text" style={{ whiteSpace: "pre-line" }}>{t2Prompt?.promptText ?? "Write about what you discussed with the examiner."}</p>
+        <div className="writing-word-guide">💡 Suggested: around {t2Prompt?.suggestedWords?.[0] ?? 80}–{t2Prompt?.suggestedWords?.[1] ?? 200} words</div>
+      </div>
+      <div className="writing-textarea-wrap">
+        <textarea ref={textareaRef} className="writing-textarea" placeholder="Start writing here…" value={t2WrittenText} onChange={e => setT2WrittenText(e.target.value)} onInput={resizeTextareaToContent} />
+        <div className="writing-footer">
+          <span className="writing-word-count">{wordCount} word{wordCount !== 1 ? "s" : ""}</span>
+          <button onClick={submitT2Writing} disabled={wordCount < 10} className="writing-submit-btn">Submit Writing →</button>
+        </div>
+      </div>
+    </div></main>
+  );
+  if (phase === "t2-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your writing…</p></div></main>);
+  if (phase === "t2-results" && t2Config) return wrap(<main className="results-page"><ResultsDashboard taskLabel="Task 2 · Inform & Narrate Results" taskNum={2} config={t2Config} diagnosis={t2Diagnosis} form={t2Form} expanded={t2Expanded} setExpanded={setT2Expanded} showTranscript={t2ShowTranscript} setShowTranscript={setT2ShowTranscript} messages={t2ScaffoldMsgs} nextAction={() => setPhase("t3-briefing")} nextLabel="Continue to Task 3 →" writtenText={t2WrittenText} showWriting={t2ShowWriting} setShowWriting={setT2ShowWriting} /></main>);
+
+  /* ── TASK 3 ────────────────────────────────────────────────────────── */
+  if (phase === "t3-briefing") return wrap(
+    <main className="split-briefing-container split-briefing-task3">
+      <div className="split-briefing-inner animate-fade-up">
+        <div className="sb-left">
+          <div className="sb-badge">💬 Writing Test · Task 3</div>
+          <h1 className="sb-title">Express &amp; <em>Argue</em></h1>
+          <p className="sb-subtitle">Opinion chat · 4–5 minutes</p>
+          <div className="sb-section">
+            <div className="sb-section-title">What you&apos;ll do</div>
+            <div className="sb-section-body">You&apos;ll choose a topic you care about, then have a written back-and-forth with the AI — like a text debate.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">How the chat works</div>
+            <div className="sb-section-body">The AI will respond to what you write. It may disagree, ask &quot;why?&quot;, or offer another side of the argument. You don&apos;t have to &quot;win&quot; — just respond honestly.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">What to focus on</div>
+            <div className="sb-section-body">Say what you think and explain yourself when asked. Short answers are fine; the important part is that you engage with the questions.</div>
+          </div>
+          <div className="sb-reassurance">There are no trick questions — we want to see how you handle a real discussion in writing.</div>
+          <button onClick={() => setPhase("t3-topic-select")} className="sb-start-btn">Choose a topic <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+          <button type="button" className="skip-task-btn" onClick={() => setPhase("t4-briefing")}>Skip this task →</button>
+        </div>
+        <div className="sb-right">
+          <div className="sb-right-label">Stakeholder Context</div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why this task exists</div><div className="sb-right-section-body">It tests <strong>expressing</strong> and <strong>arguing</strong> — stating a view and supporting it when someone pushes back.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why interactive debate</div><div className="sb-right-section-body">A live exchange draws out reasoning, rebuttal, and nuance better than a one-off opinion paragraph. Static &quot;write your opinion&quot; tasks often show less evidence of argument skill.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How ability is elicited</div><div className="sb-right-section-body">Challenge–response patterns show whether the candidate can justify, adjust, and defend a line of thought under pressure — not only state a position once.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How it is scored</div><div className="sb-right-section-body">The transcript is reviewed for clear evidence of those abilities:<div className="sb-verdict-row"><div className="sb-verdict"><span className="sb-verdict-tag can">Confirmed</span> demonstrated clearly under demand</div><div className="sb-verdict"><span className="sb-verdict-tag not-yet">Not demonstrated</span> not consistently evidenced</div></div></div></div>
+        </div>
+      </div>
+    </main>
+  );
+  if (phase === "t3-topic-select") {
+    const allTopics = [
+      { id: "social-media", label: "Social Media" },
+      { id: "remote-work", label: "Working from Home" },
+      { id: "city-country", label: "City vs Countryside" },
+      { id: "travel", label: "Travel & Holidays" },
+      { id: "online-learning", label: "Online Learning" },
+      { id: "climate-change", label: "Climate Change" },
+      { id: "fast-fashion", label: "Fast Fashion" },
+      { id: "public-transport", label: "Public Transport" },
+      { id: "pets", label: "Keeping Pets" },
+      { id: "screen-time", label: "Screen Time" },
+      { id: "sport-schools", label: "Sport in Schools" },
+      { id: "cooking-eating", label: "Cooking vs Eating Out" },
+      { id: "age-driving", label: "Age & Driving" },
+      { id: "uniforms", label: "School Uniforms" },
+      { id: "gap-year", label: "Taking a Gap Year" },
+      { id: "technology-health", label: "Technology & Health" },
+      { id: "volunteering", label: "Volunteering" },
+      { id: "money-happiness", label: "Money & Happiness" },
+      { id: "zoos", label: "Zoos & Animal Parks" },
+      { id: "tourism", label: "Tourism & Local Life" },
+      { id: "advertising", label: "Advertising" },
+      { id: "exams", label: "Exams & Testing" },
+      { id: "sharing-economy", label: "The Sharing Economy" },
+      { id: "neighbourhood", label: "Your Neighbourhood" },
+    ];
+    const shuffled = [...allTopics].sort(() => Math.random() - 0.5);
+    const familiarTopics = shuffled.slice(0, 4);
+    return wrap(<main className="topic-page"><div className="topic-frame animate-slide-up"><h2>Pick a Topic</h2><p>Choose the topic you&apos;d like to discuss. The AI will challenge your opinions!</p><div className="topic-grid">{familiarTopics.map((t) => (<button key={t.id} className="topic-btn" onClick={() => startT3(t.id)}>{t.label}</button>))}</div></div></main>);
+  }
+  if (phase === "t3-conversation") return wrap(<div className="debate-accent"><PhoneChat label="Debate Partner" subtitle="Task 3 · Express & Argue" messages={t3Messages} input={t3Input} setInput={setT3Input} processing={t3Processing} doneRef={t3DoneRef} sendFn={sendT3} exchangeCount={t3ExchangeCount} maxExchanges={t3Config?.meta?.maxExchanges || 14} chatEndRef={chatEndRef} inputRef={inputRef} onFinishEarly={() => { void finishT3(t3Messages, t3ExchangeCount); }} /></div>);
+  if (phase === "t3-probing") return wrap(<div className="debate-accent"><PhoneChat label="Debate Partner" subtitle="Task 3 · Follow-up Questions" messages={t3Messages} input={t3Input} setInput={setT3Input} processing={t3Processing} doneRef={t3ProbeDoneRef} sendFn={sendT3Probe} exchangeCount={t3ProbeCount} maxExchanges={3} chatEndRef={chatEndRef} inputRef={inputRef} /></div>);
+  if (phase === "t3-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your arguments…</p></div></main>);
+  if (phase === "t3-results" && t3Config) return wrap(<main className="results-page"><ResultsDashboard taskLabel="Task 3 · Express & Argue Results" taskNum={3} config={t3Config} diagnosis={t3Diagnosis} form={t3Form} expanded={t3Expanded} setExpanded={setT3Expanded} showTranscript={t3ShowTranscript} setShowTranscript={setT3ShowTranscript} messages={t3Messages} nextAction={() => setPhase("t4-briefing")} nextLabel="Continue to Task 4 →" /></main>);
+
+  /* ── TASK 4 ────────────────────────────────────────────────────────── */
+  if (phase === "t4-briefing") return wrap(
+    <main className="split-briefing-container split-briefing-task4">
+      <div className="split-briefing-inner animate-fade-up">
+        <div className="sb-left">
+          <div className="sb-badge">🔄 Writing Test · Task 4</div>
+          <h1 className="sb-title">Rephrase &amp; <em>Adjust</em></h1>
+          <p className="sb-subtitle">Short texts · 4–5 minutes</p>
+          <div className="sb-section">
+            <div className="sb-section-title">What you&apos;ll do</div>
+            <div className="sb-section-body">You&apos;ll see several short texts. Each time, you&apos;ll be asked to rewrite the text for a new purpose — for example, simpler language, a different tone, or a different reader.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">How to approach it</div>
+            <div className="sb-section-body">Read the original carefully, read what you&apos;re asked to do, then write your version. You can move on when you&apos;re happy with each answer.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">What matters</div>
+            <div className="sb-section-body">Focus on matching the task: the right level of formality, clarity, and fit for the situation described — not on memorising rules.</div>
+          </div>
+          <div className="sb-reassurance">You&apos;re not being tested on naming grammar terms — we care how well your rewritten text fits the brief.</div>
+          <button onClick={startT4} className="sb-start-btn">Start challenges <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+          <button type="button" className="skip-task-btn" onClick={() => setPhase("t5-briefing")}>Skip this task →</button>
+        </div>
+        <div className="sb-right">
+          <div className="sb-right-label">Stakeholder Context</div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why this task exists</div><div className="sb-right-section-body">It targets <strong>mediating</strong> and <strong>pragmatic</strong> competence — reshaping language for purpose and audience, not only producing original text from scratch.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why transformation tasks</div><div className="sb-right-section-body">Rewriting for a new purpose shows register control and flexibility in a way open-ended production tasks often miss. Candidates must adjust form while preserving meaning.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How ability is elicited</div><div className="sb-right-section-body">Each stimulus is aligned to specific macro-level claims so different items stress different aspects of mediating performance.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How it is scored</div><div className="sb-right-section-body">Responses are judged against those claims:<div className="sb-verdict-row"><div className="sb-verdict"><span className="sb-verdict-tag can">Confirmed</span> clearly shown in the rewrite</div><div className="sb-verdict"><span className="sb-verdict-tag not-yet">Not demonstrated</span> not sufficiently evidenced</div></div></div></div>
+        </div>
+      </div>
+    </main>
+  );
+  if (phase === "t4-loading-stimuli") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Preparing your challenges…</p></div></main>);
+  if (phase === "t4-challenges" && t4CurrentStimulus) return wrap(
+    <main className="challenge-page">
+      <div className="challenge-header animate-fade-up">
+        <h2>Challenge {t4CurrentIdx + 1} of {t4Stimuli.length}</h2>
+        <p>Read the original text, then rewrite it as instructed.</p>
+        <div className="challenge-progress">{t4Stimuli.map((_, i) => (<div key={i} className={`challenge-dot ${i === t4CurrentIdx ? "active" : (t4Responses[t4Stimuli[i].id] || "").trim() ? "done" : ""}`} />))}</div>
+      </div>
+      <div className="challenge-card">
+        <div className="challenge-stimulus-area">
+          <span className={`challenge-type-tag ${t4CurrentStimulus.type}`}>{t4CurrentStimulus.type === "simplify" ? "✨ Simplify" : t4CurrentStimulus.type === "formalise" ? "👔 Formalise" : t4CurrentStimulus.type === "audience" ? "👥 Audience" : "🎭 Tone"}</span>
+          <div className="challenge-instruction">{t4CurrentStimulus.instruction}</div>
+          <div className="challenge-stimulus-box"><div className="challenge-stimulus-label">Original text</div><div className="challenge-stimulus-text">{t4CurrentStimulus.stimulus}</div></div>
+        </div>
+        <div className="challenge-response-area">
+          <div className="challenge-response-label">Your version</div>
+          <textarea key={t4CurrentStimulus.id} className="challenge-textarea" placeholder="Write your rewritten version here…" value={t4CurrentResponse} onChange={e => setT4Responses(prev => ({ ...prev, [t4CurrentStimulus.id]: e.target.value }))} onInput={resizeTextareaToContent} />
+        </div>
+        <div className="challenge-nav">
+          <button className="challenge-nav-btn secondary" disabled={t4CurrentIdx === 0} onClick={() => setT4CurrentIdx(i => i - 1)}>← Previous</button>
+          {t4CurrentIdx < t4Stimuli.length - 1 ? (
+            <button className="challenge-nav-btn primary" disabled={!t4CurrentResponse.trim()} onClick={() => setT4CurrentIdx(i => i + 1)}>Next →</button>
+          ) : (
+            <button className="challenge-nav-btn primary" disabled={!t4AllDone} onClick={submitT4}>Submit All →</button>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+  if (phase === "t4-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your transformations…</p></div></main>);
+  if (phase === "t4-results" && t4Config) {
+    const t4TranscriptMsgs: Message[] = t4Stimuli.flatMap(s => [
+      { role: "assistant" as const, content: `[${s.label}] ${s.instruction}\n\nOriginal: "${s.stimulus}"` },
+      { role: "user" as const, content: t4Responses[s.id] || "(no response)" },
+    ]);
+    return wrap(<main className="results-page"><ResultsDashboard taskLabel="Task 4 · Rephrase & Adjust Results" taskNum={4} config={t4Config} diagnosis={t4Diagnosis} form={t4Form} expanded={t4Expanded} setExpanded={setT4Expanded} showTranscript={t4ShowTranscript} setShowTranscript={setT4ShowTranscript} messages={t4TranscriptMsgs} nextAction={() => setPhase("t5-briefing")} nextLabel="Continue to Task 5 →" /></main>);
+  }
+
+  /* ── TASK 5 ────────────────────────────────────────────────────────── */
+  if (phase === "t5-briefing") return wrap(
+    <main className="split-briefing-container split-briefing-task5">
+      <div className="split-briefing-inner animate-fade-up">
+        <div className="sb-left">
+          <div className="sb-badge">🔀 Writing Test · Task 5</div>
+          <h1 className="sb-title">Compare &amp; <em>Advise</em></h1>
+          <p className="sb-subtitle">Two options + chat · 4–5 minutes</p>
+          <div className="sb-section">
+            <div className="sb-section-title">What you&apos;ll do</div>
+            <div className="sb-section-body">You&apos;ll see two options shown side by side (like two cards). Then you&apos;ll chat in writing about them — comparing them and suggesting which might suit someone better.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">How the chat works</div>
+            <div className="sb-section-body">The AI will describe different people or situations and ask for your recommendation. The situation may change — you might need to rethink your advice when the details change.</div>
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-title">What to focus on</div>
+            <div className="sb-section-body">Explain your thinking in plain language. Compare the options when it helps, and say why a choice fits (or doesn&apos;t fit) the person or context you&apos;re given.</div>
+          </div>
+          <div className="sb-reassurance">It&apos;s fine to ask for clarification in the chat if something is unclear.</div>
+          <button onClick={startT5} className="sb-start-btn">See the options <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+          <button type="button" className="skip-task-btn" onClick={() => setPhase("final-report")}>Skip this task →</button>
+        </div>
+        <div className="sb-right">
+          <div className="sb-right-label">Stakeholder Context</div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why this task exists</div><div className="sb-right-section-body">It tests <strong>mediating</strong> — helping someone decide by selecting and adapting information, not only listing facts.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">Why situational advice</div><div className="sb-right-section-body">Advisory dialogue shows selective relay and adaptation: candidates must tune recommendations to goals and constraints. Static compare-and-contrast essays rarely show that flexibility.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How ability is elicited</div><div className="sb-right-section-body">Changing scenarios probe whether advice shifts when priorities change — evidence of responsive mediation rather than a single rehearsed answer.</div></div>
+          <div className="sb-right-section"><div className="sb-right-section-title">How it is scored</div><div className="sb-right-section-body">The exchange is reviewed for evidence against the mediating claims:<div className="sb-verdict-row"><div className="sb-verdict"><span className="sb-verdict-tag can">Confirmed</span> demonstrated clearly under demand</div><div className="sb-verdict"><span className="sb-verdict-tag not-yet">Not demonstrated</span> not consistently evidenced</div></div></div></div>
+        </div>
+      </div>
+    </main>
+  );
+  if (phase === "t5-loading") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Preparing your options…</p></div></main>);
+  if (phase === "t5-conversation" && t5StimulusSet) return wrap(
+    <div className="t5-split">
+      <div className="t5-cards-bar">{renderT5Card(t5StimulusSet.cardA)}{renderT5Card(t5StimulusSet.cardB)}</div>
+      <div className="t5-chat-area t5-accent"><PhoneChat label="Adviser" subtitle="Task 5 · Compare & Advise" messages={t5Messages} input={t5Input} setInput={setT5Input} processing={t5Processing} doneRef={t5DoneRef} sendFn={sendT5} exchangeCount={t5ExchangeCount} maxExchanges={t5Config?.meta?.maxExchanges || 12} chatEndRef={chatEndRef} inputRef={inputRef} onFinishEarly={() => { void finishT5(t5Messages, t5ExchangeCount); }} /></div>
+    </div>
+  );
+  if (phase === "t5-probing" && t5StimulusSet) return wrap(
+    <div className="t5-split">
+      <div className="t5-cards-bar">{renderT5Card(t5StimulusSet.cardA)}{renderT5Card(t5StimulusSet.cardB)}</div>
+      <div className="t5-chat-area t5-accent"><PhoneChat label="Adviser" subtitle="Task 5 · Follow-up Questions" messages={t5Messages} input={t5Input} setInput={setT5Input} processing={t5Processing} doneRef={t5ProbeDoneRef} sendFn={sendT5Probe} exchangeCount={t5ProbeCount} maxExchanges={3} chatEndRef={chatEndRef} inputRef={inputRef} /></div>
+    </div>
+  );
+  if (phase === "t5-diagnosing") return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /><p>Analysing your advice…</p></div></main>);
+  if (phase === "t5-results" && t5Config) return wrap(<main className="results-page"><ResultsDashboard taskLabel="Task 5 · Compare & Advise Results" taskNum={5} config={t5Config} diagnosis={t5Diagnosis} form={t5Form} expanded={t5Expanded} setExpanded={setT5Expanded} showTranscript={t5ShowTranscript} setShowTranscript={setT5ShowTranscript} messages={t5Messages} nextAction={() => setPhase("final-report")} nextLabel="View Full Report →" /></main>);
+
+  /* ── FINAL REPORT ──────────────────────────────────────────────────── */
+  if (phase === "final-report") {
+    type FnEntry = { fn: string; task: string; level: string; taskNum: number };
+    const fnEntries: FnEntry[] = [];
+    const addFn = (diag: Diagnosis | null, taskLabel: string, taskNum: number, fns: string[]) => {
+      if (!diag?.results) return;
+      const levelOrder = ["Below A1", "A1", "A2", "A2+", "B1", "B1+", "B2", "B2+", "C1", "C2"];
+      for (const fn of fns) {
+        const macros = diag.results.filter(r => r.fn === fn && r.result === "CONFIRMED");
+        if (macros.length === 0) { fnEntries.push({ fn, task: taskLabel, level: "—", taskNum }); continue; }
+        const highest = macros.reduce((best, m) => { const bi = levelOrder.indexOf(best.level); const mi = levelOrder.indexOf(m.level); return mi > bi ? m : best; }, macros[0]);
+        fnEntries.push({ fn, task: taskLabel, level: highest.level, taskNum });
+      }
+    };
+    addFn(t1Diagnosis, "Task 1", 1, ["Interactional", "Informing"]);
+    addFn(t2Diagnosis, "Task 2", 2, ["Informing", "Narrating"]);
+    addFn(t3Diagnosis, "Task 3", 3, ["Expressing", "Arguing"]);
+    addFn(t4Diagnosis, "Task 4", 4, ["Mediating"]);
+    addFn(t5Diagnosis, "Task 5", 5, ["Mediating", "Informing", "Directing"]);
+    const levelOrder = ["—", "Below A1", "A1", "A2", "A2+", "B1", "B1+", "B2", "B2+", "C1", "C2"];
+    const fnMap = new Map<string, FnEntry>();
+    for (const e of fnEntries) { const existing = fnMap.get(e.fn); if (!existing || levelOrder.indexOf(e.level) > levelOrder.indexOf(existing.level)) { fnMap.set(e.fn, e); } }
+    const fnSummary = Array.from(fnMap.values());
+    const confirmedLevels = fnSummary.map(f => f.level).filter(l => l !== "—");
+    const overallFn = medianCefrLevel(confirmedLevels, levelOrder);
+    type FormEntry = { dimension: string; level: string; descriptor: string; source: string; examples: string[]; levelMeaning?: string; focusNext?: string; outliers?: string[]; vocabRange?: string; vocabConsistency?: string };
+    const formEntries: FormEntry[] = [];
+    const addForm = (form: FormAnalysis | null, src: string) => { if (!form?.dimensions) return; for (const d of form.dimensions) { formEntries.push({ dimension: d.dimension, level: d.level, descriptor: d.descriptor, source: src, examples: d.examples ?? [], levelMeaning: d.levelMeaning, focusNext: d.focusNext, outliers: d.outliers, vocabRange: d.vocabRange, vocabConsistency: d.vocabConsistency }); } };
+    addForm(t1Form, "T1"); addForm(t2Form, "T2"); addForm(t3Form, "T3"); addForm(t4Form, "T4"); addForm(t5Form, "T5");
+    // Weighted aggregation: for each dimension, pick the entry from the most
+    // appropriate task type rather than blindly taking the highest.
+    // Grammar & Mechanics → prefer extended writing (T2) then transform (T4)
+    // Vocabulary → prefer extended writing (T2) then highest across all
+    // Discourse → prefer chat tasks (T1, T3, T5) then highest across all
+    const dimPriority: Record<string, string[]> = {
+      "Grammar Control": ["T2", "T4"],
+      "Mechanics": ["T2", "T4"],
+      "Vocabulary Range": ["T2"],
+      "Discourse Management": ["T1", "T3", "T5"],
+    };
+    const dimMap = new Map<string, FormEntry>();
+    for (const dim of ["Grammar Control", "Vocabulary Range", "Discourse Management", "Mechanics"]) {
+      const entries = formEntries.filter(e => e.dimension === dim);
+      if (entries.length === 0) continue;
+      const preferred = dimPriority[dim] ?? [];
+      // First: look for the highest score among preferred task types
+      const preferredEntries = entries.filter(e => preferred.includes(e.source));
+      const pool = preferredEntries.length > 0 ? preferredEntries : entries;
+      const best = pool.reduce((a, b) => levelOrder.indexOf(b.level) > levelOrder.indexOf(a.level) ? b : a, pool[0]);
+      dimMap.set(dim, best);
+    }
+    const formSummary = Array.from(dimMap.values());
+    // Mechanics exclusion: compute mode from Grammar, Vocabulary, Discourse first.
+    // Only include Mechanics if it's within one band of that core mode.
+    const coreDims = formSummary.filter(f => f.dimension !== "Mechanics");
+    const coreLevels = coreDims.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0);
+    const coreMode = medianCefrLevel(coreLevels, levelOrder);
+    const mechanicsDim = formSummary.find(f => f.dimension === "Mechanics");
+    const mechanicsLevel = mechanicsDim?.level ?? "—";
+    const coreModeIdx = levelOrder.indexOf(coreMode);
+    const mechIdx = levelOrder.indexOf(mechanicsLevel);
+    // Include mechanics only if within 1 band of the core mode
+    const includeMechanics = mechIdx > 0 && Math.abs(coreModeIdx - mechIdx) <= 1;
+    const overallFormLevels = includeMechanics
+      ? formSummary.map(f => f.level).filter(l => levelOrder.indexOf(l) > 0)
+      : coreLevels;
+    const overallForm = medianCefrLevel(overallFormLevels, levelOrder);
+    const nextSteps = getNextSteps([t1Diagnosis, t2Diagnosis, t3Diagnosis, t4Diagnosis, t5Diagnosis], formSummary.map(f => ({ dimension: f.dimension, level: f.level, descriptor: f.descriptor })));
+    const taskNumsForFn = (fn: string) => [...new Set(fnEntries.filter(e => e.fn === fn).map(e => e.taskNum))].sort((a, b) => a - b);
+    const finalReportTaskFns: Record<number, string[]> = {
+      1: ["Interactional", "Informing"],
+      2: ["Informing", "Narrating"],
+      3: ["Expressing", "Arguing"],
+      4: ["Mediating"],
+      5: ["Mediating", "Informing", "Directing"],
+    };
+    const taskDiagnoses: { num: number; diag: Diagnosis | null }[] = [
+      { num: 1, diag: t1Diagnosis },
+      { num: 2, diag: t2Diagnosis },
+      { num: 3, diag: t3Diagnosis },
+      { num: 4, diag: t4Diagnosis },
+      { num: 5, diag: t5Diagnosis },
+    ];
+
+    return wrap(
+      <main className="report-page">
+        <nav className="report-nav">
+          <div className="report-nav-logo">FEAT <em>Writing Test</em></div>
+          <div className="report-nav-tag">Final Report</div>
+        </nav>
+        <header className="final-report-hero animate-fade-up">
+          <div className="final-report-hero-inner">
+            <div className="final-report-hero-left">
+              <div className="final-report-eyebrow">Assessment complete — 5 tasks</div>
+              <h1 className="final-report-title">Your <em>Writing Profile</em></h1>
+              <p className="final-report-sub">7 communicative functions tested across 5 tasks · 5 language dimensions</p>
+            </div>
+            <div className="final-report-hero-metrics">
+              <div className="final-report-metric">
+                <div className="final-report-metric-label">Overall function level</div>
+                <div className="final-report-metric-value fn">{overallFn}</div>
+                <div className="final-report-metric-soft">{overallFn !== "—" ? softenLevel(overallFn) : "—"}</div>
+              </div>
+              <div className="final-report-metric">
+                <div className="final-report-metric-label">Overall form level</div>
+                <div className="final-report-metric-value form">{overallForm}</div>
+                <div className="final-report-metric-soft">{overallForm !== "—" ? softenLevel(overallForm) : "—"}</div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="final-report-body">
+          <div className="final-report-col-left">
+            <section className="final-report-section animate-fade-up" style={{ animationDelay: "80ms" }}>
+              <h2 className="final-report-section-title">What you can do — all functions</h2>
+              {FINAL_REPORT_ALL_FUNCTIONS.map(fnName => {
+                const row = fnMap.get(fnName);
+                const lvl = row?.level ?? "—";
+                const pct = lvl === "—" ? 0 : levelToPercent(lvl);
+                const src = formatFinalReportTaskSource(taskNumsForFn(fnName));
+                return (
+                  <div className="final-report-bar-row" key={fnName}>
+                    <div className="final-report-bar-name">{fnName}</div>
+                    <div className="final-report-bar-src">{src}</div>
+                    <div className="final-report-bar-track">
+                      <div className="final-report-bar-fill" style={{ width: `${pct}%`, background: lvl === "—" ? "transparent" : barColor(lvl) }} />
+                    </div>
+                    <div className="final-report-bar-level">{lvl === "—" ? "—" : lvl}</div>
+                  </div>
+                );
+              })}
+            </section>
+            <section className="final-report-section animate-fade-up" style={{ animationDelay: "140ms" }}>
+              <h2 className="final-report-section-title">How you communicate</h2>
+              {formSummary.map((dim, i) => (
+                <div key={dim.dimension} className="form-dim-card">
+                  <div className="form-dim-card-header">
+                    <div className="form-dim-name-new">{dim.dimension}</div>
+                    <div className="form-dim-bar-new">
+                      <div className="form-dim-bar-fill-new" style={{ width: `${levelToPercent(dim.level)}%`, background: barColor(dim.level), animationDelay: `${i * 0.08}s` }} />
+                    </div>
+                    <div className="form-dim-level-new">{dim.level}</div>
+                  </div>
+                  {dim.levelMeaning && (
+                    <div className="form-dim-meaning">{dim.level} means: {dim.levelMeaning}</div>
+                  )}
+                  <div className="form-dim-desc-new">{dim.descriptor}</div>
+                  {dim.examples && dim.examples.length > 0 && (
+                    <div className="form-dim-evidence">
+                      <span className="form-dim-evidence-label">Evidence: </span>
+                      {dim.examples.map((ex, j) => (
+                        <span key={j} className="form-dim-evidence-quote">&ldquo;{ex}&rdquo;{j < dim.examples.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.outliers && dim.outliers.length > 0 && (
+                    <div className="form-dim-outliers">
+                      <span className="form-dim-outliers-label">Reaching above your level: </span>
+                      {dim.outliers.map((ol, j) => (
+                        <span key={j} className="form-dim-outliers-quote">&ldquo;{ol}&rdquo;{j < dim.outliers!.length - 1 ? " · " : ""}</span>
+                      ))}
+                    </div>
+                  )}
+                  {dim.dimension === "Vocabulary Range" && dim.vocabRange && dim.vocabRange !== dim.level && (
+                    <div className="form-dim-vocab-split">
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Range (highest demonstrated)</div>
+                        <div className={`form-dim-vocab-metric-value${dim.vocabRange !== dim.level ? " reaching" : ""}`}>{dim.vocabRange}</div>
+                      </div>
+                      <div className="form-dim-vocab-metric">
+                        <div className="form-dim-vocab-metric-label">Consistency</div>
+                        <div className="form-dim-vocab-metric-value">{dim.vocabConsistency === "consistent" ? "Sustained throughout" : dim.vocabConsistency === "occasional" ? "Appears 2–3 times" : "Isolated moments"}</div>
+                      </div>
+                    </div>
+                  )}
+                  {dim.focusNext && (
+                    <div className="form-dim-focus">Next time, focus on: {dim.focusNext}</div>
+                  )}
+                </div>
+              ))}
+            </section>
+            <section className="final-report-section animate-fade-up" style={{ animationDelay: "200ms" }}>
+              <h2 className="final-report-section-title">What to improve next</h2>
+              {nextSteps.map((s, i) => (
+                <div key={i} className="final-report-improve-item">{s}</div>
+              ))}
+            </section>
+          </div>
+          <aside className="final-report-col-right animate-fade-up" style={{ animationDelay: "120ms" }}>
+            <h2 className="final-report-section-title">By task</h2>
+            {taskDiagnoses.map(({ num, diag }) => {
+              if (!diag?.results?.length) return null;
+              const meta = TASK_META[num];
+              const fns = finalReportTaskFns[num] ?? meta?.functions ?? [];
+              return (
+                <div className="final-report-task" key={num}>
+                  <div className="final-report-task-label">
+                    T{num}
+                    {meta?.label ? ` · ${meta.label}` : ""}
+                  </div>
+                  {fns.map(fn => {
+                    const lvl = getConfirmedFnLevelForTask(diag, fn);
+                    return (
+                      <div className="final-report-task-fn" key={fn}>
+                        <span className="final-report-task-fn-name">{fn}</span>
+                        <span className="final-report-task-fn-lvl" style={{ color: finalReportLevelColor(lvl) }}>{lvl}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </aside>
+        </div>
+      </main>
+    );
+  }
+
+  return wrap(<main className="diagnosing-container"><p>Something went wrong.</p></main>);
+}

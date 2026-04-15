@@ -188,22 +188,35 @@ export async function POST(req: NextRequest) {
 
       const selected: typeof allStimuli = [];
 
+      // Prefer items whose `type` isn't already represented, so candidates see a mix
+      // (simplify / formalise / tone / audience) rather than three of the same kind.
+      const addDiverse = (pool: typeof allStimuli, cap: number) => {
+        const usedTypes = () => new Set(selected.map(s => s.type));
+        // First pass: only add if type is new
+        for (const s of pool) {
+          if (selected.length >= cap) break;
+          if (selected.find(x => x.id === s.id)) continue;
+          if (usedTypes().has(s.type)) continue;
+          selected.push(s);
+        }
+        // Second pass: fill remaining slots with whatever's left
+        for (const s of pool) {
+          if (selected.length >= cap) break;
+          if (selected.find(x => x.id === s.id)) continue;
+          selected.push(s);
+        }
+      };
+
       const atOrBelow = sorted.filter(s => (stimLevelScore[s.level] ?? 4) <= score);
       if (atOrBelow.length > 0) selected.push(atOrBelow[atOrBelow.length - 1]);
 
       const atLevel = sorted.filter(s => (stimLevelScore[s.level] ?? 4) === score || (stimLevelScore[s.level] ?? 4) === score + 1);
-      for (const s of atLevel) {
-        if (!selected.find(x => x.id === s.id) && selected.length < 3) selected.push(s);
-      }
+      addDiverse(atLevel, 3);
 
       const stretch = sorted.filter(s => (stimLevelScore[s.level] ?? 4) > score);
-      for (const s of stretch) {
-        if (!selected.find(x => x.id === s.id) && selected.length < 4) selected.push(s);
-      }
+      addDiverse(stretch, 4);
 
-      for (const s of sorted) {
-        if (!selected.find(x => x.id === s.id) && selected.length < 3) selected.push(s);
-      }
+      addDiverse(sorted, 4);
 
       // B2+ candidates: ensure at least one high-level stimulus (B2+ on stimulus scale) for ceiling evidence
       if (score >= 6) {
