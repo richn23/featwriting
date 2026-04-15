@@ -52,12 +52,9 @@ export function OpinionChatTask({ task }: OpinionChatTaskProps) {
   const start = async (topicId: string) => {
     doneRef.current = false;
     setChosenTopic(topicId);
-    // Default to B1 tier for standalone component (no prior level available)
-    const switchTier = "B1";
-    const options = (config as unknown as { topicOptions?: TopicOption[] })?.topicOptions ?? [];
-    const switchOptions = options.filter((t: TopicOption) => t.tier === switchTier && t.id !== topicId);
-    const picked = switchOptions.length > 0 ? switchOptions[Math.floor(Math.random() * switchOptions.length)] : null;
-    if (picked) setSwitchTopic(picked.id);
+    // Standalone flow: stay on the chosen topic the whole time — no mid-chat switch.
+    // (The switch was jarring and broke rapport on short 8-exchange conversations.)
+    setSwitchTopic(null);
     setPhase("conversation");
     setProcessing(true);
     const res = await fetch(task.apiEndpoint, {
@@ -92,7 +89,7 @@ export function OpinionChatTask({ task }: OpinionChatTaskProps) {
       return;
     }
 
-    const shouldSwitch = switchTopic && nextCount >= 6 && nextCount <= 8;
+    const shouldSwitch = switchTopic && nextCount >= 4 && nextCount <= 5;
     const chatRes = await fetch(task.apiEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

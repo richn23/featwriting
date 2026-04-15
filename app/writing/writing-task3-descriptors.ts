@@ -94,7 +94,7 @@ const meta: WritingTask3Config["meta"] = {
   taskId: "w-task-3",
   title: "Express & Argue",
   functions: ["Expressing", "Arguing"],
-  maxExchanges: 14,
+  maxExchanges: 8,
   description:
     "Chat-based opinion task. Candidate picks from 3 randomly selected familiar topics, " +
     "then debates with the AI. AI challenges, disagrees, asks why. " +
