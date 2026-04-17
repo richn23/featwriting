@@ -4,300 +4,281 @@ import { writingStyles } from "./_shared/styles";
 
 /* ─── Five FEAT verticals ──────────────────────────────────── */
 
-const VERTICALS = [
+const SEGMENTS = [
   {
     id: "esl",
-    name: "ESL",
-    color: "#34d399",
-    tagline: "English language testing",
-    body: "Functional assessment of what learners can do with English — not just accuracy. Interactive tasks, AI-driven evidence collection, dual profiles for function and form.",
-    href: "/writing/cefr",
-    chips: ["Diagnostic Chat", "Extended Writing", "Opinion Chat", "Pragmatic Control", "Mediation"],
-    ready: true,
-  },
-  {
-    id: "cefr",
-    name: "CEFR",
-    color: "#38bdf8",
-    tagline: "CEFR-aligned assessment",
-    body: "Tasks mapped to CEFR levels and GSE descriptors. Evidence scored against can-do statements. Reports show where learners sit — and what to teach next.",
-    href: "/writing/cefr",
-    chips: ["A1–C2", "GSE aligned", "Can-do statements", "Level placement"],
+    label: "ESL",
+    sub: "English Language Testing",
+    href: "/writing/esl",
+    bg: "rgba(52,211,153,.045)",
+    accent: "#34d399",
     ready: true,
   },
   {
     id: "professional",
-    name: "Professional",
-    color: "#fbbf24",
-    tagline: "Workplace readiness",
-    body: "Decision-making under pressure, applied CPD, AI literacy, information handling, and structured reasoning. Interactive scenarios scored against transparent criteria.",
-    href: "/writing/beyond",
-    chips: ["Operational Judgment", "Applied CPD", "AI Policy", "Info Triage", "Argument Evaluation"],
+    label: "Professional",
+    sub: "Workplace Readiness",
+    href: "/writing/professional",
+    bg: "rgba(251,191,36,.04)",
+    accent: "#fbbf24",
     ready: true,
   },
   {
     id: "academic",
-    name: "Academic",
-    color: "#a78bfa",
-    tagline: "Formative assessment & progress testing",
-    body: "Check whether learners can apply what they have been taught — not just recall it. Functions tied to course objectives, tested through structured dialogue.",
-    href: "#",
-    chips: ["Learning checks", "Progress testing", "Application not recall"],
-    ready: false,
+    label: "Academic",
+    sub: "Formative Assessment",
+    href: "/writing/academic",
+    bg: "rgba(167,139,250,.04)",
+    accent: "#a78bfa",
+    ready: true,
+  },
+  {
+    id: "cefr",
+    label: "CEFR",
+    sub: "Level-Aligned Assessment",
+    href: "/writing/cefr",
+    bg: "rgba(56,189,248,.04)",
+    accent: "#38bdf8",
+    ready: true,
   },
   {
     id: "beyond",
-    name: "Beyond",
-    color: "#fb7185",
-    tagline: "Define your own",
-    body: "The same engine — applied to anything. Define the function, set the criteria, collect the evidence. Medical communication, compliance, onboarding, any domain.",
-    href: "#",
-    chips: ["Custom criteria", "Any domain", "Your context"],
-    ready: false,
+    label: "Beyond",
+    sub: "Define Your Own",
+    href: "/writing/custom",
+    bg: "rgba(251,113,133,.035)",
+    accent: "#fb7185",
+    ready: true,
   },
 ];
 
-/* ─── Positions for the radial layout (angle from top, in degrees) ─── */
-const ANGLES = [270, 342, 54, 126, 198]; // top, top-right, bottom-right, bottom-left, top-left
+/*
+  Geometry: 5 equal wedges (72° each), rays from centre (50%,50%).
+  Ray angles (clockwise from top):
+    Ray 0: -90°  → hits (50%, 0%)
+    Ray 1: -18°  → hits (100%, 33.75%)
+    Ray 2:  54°  → hits (86.3%, 100%)
+    Ray 3: 126°  → hits (13.7%, 100%)
+    Ray 4: 198°  → hits (0%, 33.75%)
+*/
+
+const CLIPS = [
+  "polygon(50% 50%, 50% 0%, 100% 0%, 100% 33.75%)",          // top-right
+  "polygon(50% 50%, 100% 33.75%, 100% 100%, 86.3% 100%)",    // right
+  "polygon(50% 50%, 86.3% 100%, 13.7% 100%)",                 // bottom
+  "polygon(50% 50%, 13.7% 100%, 0% 100%, 0% 33.75%)",        // left
+  "polygon(50% 50%, 0% 33.75%, 0% 0%, 50% 0%)",              // top-left
+];
+
+/* Label positions: centroid of each wedge, pushed ~32% from centre */
+const LABELS: [number, number][] = [
+  [68, 24],   // top-right
+  [80, 60],   // right
+  [50, 82],   // bottom
+  [20, 60],   // left
+  [32, 24],   // top-left
+];
+
+/* Dividing line angles (from centre, CSS rotation) */
+const LINE_ANGLES = [-90, -18, 54, 126, 198];
 
 const ARROW = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
 );
 
 /* ─── Styles ───────────────────────────────────────────────── */
 
 const hubStyles = `
-/* ─── Hub page ─── */
-.hub-page {
-  min-height:100vh; display:flex; flex-direction:column;
-  background:var(--s-bg); color:var(--s-text); overflow-x:hidden;
+.hub {
+  position:relative; width:100vw; height:100vh; overflow:hidden;
+  background:#0d1117;
 }
 
-/* Nav */
-.hub-nav {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:18px 36px; border-bottom:1px solid rgba(255,255,255,.06);
-  position:relative; z-index:10;
-}
-.hub-nav-logo {
-  font-family:'DM Serif Display',serif; font-size:1.15rem; color:var(--s-text);
-  letter-spacing:-.02em;
-}
-.hub-nav-flyer {
-  display:inline-flex; align-items:center; gap:6px;
-  font-size:.72rem; font-weight:600; color:var(--s-text-muted);
-  text-decoration:none; padding:6px 14px; border:1px solid rgba(255,255,255,.1);
-  border-radius:8px; transition:border-color .2s, color .2s;
-}
-.hub-nav-flyer:hover { border-color:var(--s-accent); color:var(--s-accent) }
-
-/* Hero centre */
-.hub-hero {
-  text-align:center; padding:60px 24px 20px; position:relative; z-index:5;
-}
-.hub-hero-eyebrow {
-  font-size:.55rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.18em; color:var(--s-text-muted); margin-bottom:16px;
-}
-.hub-hero-title {
-  font-family:'DM Serif Display',serif;
-  font-size:clamp(2.4rem, 5vw, 3.6rem);
-  font-weight:400; letter-spacing:-.03em; line-height:1.1;
-  color:var(--s-text); margin-bottom:12px;
-}
-.hub-hero-title em { font-style:italic; color:var(--s-accent) }
-.hub-hero-sub {
-  font-size:.92rem; color:var(--s-text-muted); line-height:1.7;
-  max-width:520px; margin:0 auto;
-}
-
-/* Radial hub — desktop */
-.hub-radial {
-  position:relative; width:100%; max-width:960px;
-  height:620px; margin:0 auto; flex-shrink:0;
-}
-.hub-centre-dot {
-  position:absolute; left:50%; top:50%;
-  transform:translate(-50%,-50%);
-  width:80px; height:80px; border-radius:50%;
-  background:radial-gradient(circle, rgba(52,211,153,.08) 0%, transparent 70%);
+/* Wedge segments */
+.hub-wedge {
+  position:absolute; inset:0;
   display:flex; align-items:center; justify-content:center;
-  font-family:'DM Serif Display',serif; font-size:1.3rem;
-  color:var(--s-text); letter-spacing:-.02em; z-index:4;
+  transition:background .4s ease, filter .4s ease;
+  cursor:pointer; text-decoration:none; color:inherit;
+}
+.hub-wedge:hover {
+  filter:brightness(1.4);
 }
 
-/* Connector lines */
+/* Dividing lines */
 .hub-line {
   position:absolute; left:50%; top:50%;
-  width:1px; height:180px;
+  width:1px; height:60vmax;
   transform-origin:top center;
-  background:linear-gradient(to bottom, rgba(255,255,255,.08), transparent);
-  z-index:1;
+  background:rgba(255,255,255,.07);
+  pointer-events:none; z-index:5;
 }
 
-/* Segment cards */
-.hub-seg {
-  position:absolute; width:240px;
+/* Central circle */
+.hub-centre {
+  position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
-  text-align:center; text-decoration:none; color:inherit;
-  z-index:3; transition:transform .3s ease;
+  width:clamp(160px, 18vw, 240px); height:clamp(160px, 18vw, 240px);
+  border-radius:50%;
+  background:#141b24;
+  border:1px solid rgba(255,255,255,.08);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  z-index:10; text-align:center;
+  box-shadow:0 0 80px rgba(0,0,0,.5);
 }
-.hub-seg:hover { transform:translate(-50%,-50%) scale(1.04) }
-.hub-seg-inner {
-  background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.07);
-  border-radius:16px; padding:24px 20px 20px; transition:border-color .3s, background .3s;
+.hub-centre-title {
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(1.8rem, 3.5vw, 2.8rem);
+  font-weight:400; letter-spacing:-.03em;
+  color:#e2e8f0;
 }
-.hub-seg:hover .hub-seg-inner { border-color:rgba(255,255,255,.15); background:rgba(255,255,255,.035) }
-.hub-seg-dot {
-  width:10px; height:10px; border-radius:50%; margin:0 auto 12px;
+.hub-centre-sub {
+  font-size:clamp(.42rem, .7vw, .6rem);
+  font-weight:600; text-transform:uppercase;
+  letter-spacing:.14em; color:#64748b;
+  margin-top:6px; max-width:80%;
+  line-height:1.5;
 }
-.hub-seg-name {
-  font-family:'DM Serif Display',serif; font-size:1.15rem;
-  font-weight:400; letter-spacing:-.02em; margin-bottom:4px;
+
+/* Wedge labels */
+.hub-label {
+  position:absolute; transform:translate(-50%,-50%);
+  text-align:center; pointer-events:none; z-index:6;
 }
-.hub-seg-tagline {
-  font-size:.65rem; font-weight:600; text-transform:uppercase;
-  letter-spacing:.08em; margin-bottom:10px;
+.hub-label-name {
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(1.1rem, 2vw, 1.6rem);
+  font-weight:400; letter-spacing:-.02em;
+  line-height:1.2; margin-bottom:4px;
 }
-.hub-seg-body {
-  font-size:.75rem; color:var(--s-text-muted); line-height:1.6;
-  margin-bottom:14px;
+.hub-label-name em { font-style:italic }
+.hub-label-sub {
+  font-size:clamp(.5rem, .7vw, .65rem);
+  font-weight:600; text-transform:uppercase;
+  letter-spacing:.1em; opacity:.7;
 }
-.hub-seg-chips {
-  display:flex; gap:4px; flex-wrap:wrap; justify-content:center;
-  margin-bottom:14px;
+.hub-label-cta {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:.55rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.08em; margin-top:8px; opacity:.5;
+  transition:opacity .3s;
 }
-.hub-seg-chip {
-  font-size:.5rem; font-weight:600; padding:2px 8px;
-  border-radius:20px; text-transform:uppercase; letter-spacing:.04em;
-  border:1px solid rgba(255,255,255,.07); color:var(--s-text-muted);
+.hub-wedge:hover ~ .hub-label .hub-label-cta,
+.hub-label-cta { transition:opacity .3s }
+
+.hub-label-soon {
+  font-size:.5rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.1em; margin-top:8px; opacity:.35;
 }
-.hub-seg-cta {
+
+/* Brochure link */
+.hub-brochure {
+  position:absolute; top:18px; right:24px; z-index:20;
   display:inline-flex; align-items:center; gap:6px;
-  font-size:.72rem; font-weight:600; padding:8px 20px;
-  border-radius:8px; transition:opacity .2s;
+  font-size:.68rem; font-weight:600; color:#64748b;
+  text-decoration:none; padding:6px 14px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:8px; transition:border-color .2s, color .2s;
+  background:rgba(13,17,23,.6); backdrop-filter:blur(8px);
 }
-.hub-seg-cta:hover { opacity:.88 }
-.hub-seg-coming {
-  font-size:.6rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.1em; padding:6px 16px;
-  border:1px dashed rgba(255,255,255,.12); border-radius:8px;
-  color:var(--s-text-muted);
-}
+.hub-brochure:hover { border-color:rgba(255,255,255,.2); color:#94a3b8 }
 
-/* Mobile: stack vertically */
-@media (max-width:840px) {
-  .hub-radial {
-    height:auto; display:flex; flex-direction:column;
-    align-items:center; gap:16px; padding:20px 16px 40px;
+/* Mobile */
+@media (max-width:700px) {
+  .hub { height:auto; min-height:100vh; }
+  .hub-wedge {
+    position:relative !important; clip-path:none !important;
+    inset:auto !important; width:100%; padding:28px 24px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    justify-content:flex-start;
   }
-  .hub-seg {
-    position:static !important; transform:none !important;
-    width:100%; max-width:400px;
-  }
-  .hub-seg:hover { transform:scale(1.02) !important }
-  .hub-centre-dot { display:none }
+  .hub-wedge:hover { filter:brightness(1.2) }
   .hub-line { display:none }
+  .hub-centre {
+    position:relative; transform:none;
+    left:auto; top:auto; width:100%; height:auto;
+    border-radius:0; padding:32px 24px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    box-shadow:none;
+  }
+  .hub-label {
+    position:relative !important; transform:none !important;
+    left:auto !important; top:auto !important;
+    text-align:left;
+  }
 }
-
-/* Footer */
-.hub-footer {
-  padding:20px 36px; border-top:1px solid rgba(255,255,255,.06);
-  display:flex; align-items:center; justify-content:space-between;
-  font-size:.7rem; color:#475569; margin-top:auto;
-}
-.hub-footer-logo { font-family:'DM Serif Display',serif; font-size:.85rem; color:#475569 }
-.hub-footer-logo em { font-style:italic }
 `;
 
 /* ─── Component ────────────────────────────────────────────── */
 
 export default function WritingHomePage() {
-  const RADIUS = 250;
-
   return (
     <div className="stakeholder-theme">
       <style dangerouslySetInnerHTML={{ __html: writingStyles + hubStyles }} />
-      <div className="hub-page">
-        <nav className="hub-nav">
-          <div className="hub-nav-logo">FEAT</div>
-          <a href="/FEAT_Brochure.pdf" target="_blank" rel="noopener noreferrer" className="hub-nav-flyer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            View brochure
-          </a>
-        </nav>
+      <div className="hub">
 
-        <div className="hub-hero animate-fade-up">
-          <div className="hub-hero-eyebrow">Functional Evidence-Based Assessment Tasks</div>
-          <h1 className="hub-hero-title"><em>FEAT</em></h1>
-          <p className="hub-hero-sub">
-            Define the function. Set the criteria. Collect the evidence. One engine — applied to any context where performance matters more than accuracy.
-          </p>
-        </div>
+        {/* Brochure link */}
+        <a href="/FEAT_Brochure.pdf" target="_blank" rel="noopener noreferrer" className="hub-brochure">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Brochure
+        </a>
 
-        <div className="hub-radial">
-          {/* Centre dot */}
-          <div className="hub-centre-dot">FEAT</div>
-
-          {/* Connector lines */}
-          {VERTICALS.map((v, i) => (
-            <div
-              key={`line-${v.id}`}
-              className="hub-line"
-              style={{ transform: `rotate(${ANGLES[i] + 180}deg)` }}
+        {/* Wedge segments */}
+        {SEGMENTS.map((seg, i) =>
+          seg.ready ? (
+            <Link
+              key={seg.id}
+              href={seg.href}
+              className="hub-wedge"
+              style={{ clipPath: CLIPS[i], background: seg.bg }}
             />
-          ))}
+          ) : (
+            <div
+              key={seg.id}
+              className="hub-wedge"
+              style={{ clipPath: CLIPS[i], background: seg.bg, cursor: "default" }}
+            />
+          )
+        )}
 
-          {/* Segment cards */}
-          {VERTICALS.map((v, i) => {
-            const angle = ANGLES[i];
-            const rad = (angle * Math.PI) / 180;
-            const x = 50 + (RADIUS / 960) * 100 * Math.cos(rad);
-            const y = 50 + (RADIUS / 620) * 100 * Math.sin(rad);
-            const segStyle = {
-              left: `${x}%`,
-              top: `${y}%`,
-              animationDelay: `${i * 80 + 100}ms`,
-            };
-            const inner = (
-              <div className="hub-seg-inner">
-                <div className="hub-seg-dot" style={{ background: v.color }} />
-                <div className="hub-seg-name" style={{ color: v.color }}>
-                  FEAT <em>{v.name}</em>
-                </div>
-                <div className="hub-seg-tagline" style={{ color: v.color }}>{v.tagline}</div>
-                <div className="hub-seg-body">{v.body}</div>
-                <div className="hub-seg-chips">
-                  {v.chips.map(c => (
-                    <span key={c} className="hub-seg-chip">{c}</span>
-                  ))}
-                </div>
-                {v.ready ? (
-                  <span className="hub-seg-cta" style={{ background: v.color, color: "#0d1117" }}>
-                    Explore {ARROW}
-                  </span>
-                ) : (
-                  <span className="hub-seg-coming">Coming soon</span>
-                )}
+        {/* Dividing lines */}
+        {LINE_ANGLES.map((angle) => (
+          <div
+            key={angle}
+            className="hub-line"
+            style={{ transform: `rotate(${angle + 180}deg)` }}
+          />
+        ))}
+
+        {/* Labels over each wedge */}
+        {SEGMENTS.map((seg, i) => (
+          <div
+            key={`label-${seg.id}`}
+            className="hub-label"
+            style={{ left: `${LABELS[i][0]}%`, top: `${LABELS[i][1]}%` }}
+          >
+            <div className="hub-label-name" style={{ color: seg.accent }}>
+              <em>{seg.label}</em>
+            </div>
+            <div className="hub-label-sub" style={{ color: seg.accent }}>
+              {seg.sub}
+            </div>
+            {seg.ready ? (
+              <div className="hub-label-cta" style={{ color: seg.accent }}>
+                Explore {ARROW}
               </div>
-            );
-
-            return v.ready ? (
-              <Link key={v.id} href={v.href} className="hub-seg animate-fade-up" style={segStyle}>
-                {inner}
-              </Link>
             ) : (
-              <div key={v.id} className="hub-seg animate-fade-up" style={segStyle}>
-                {inner}
-              </div>
-            );
-          })}
-        </div>
+              <div className="hub-label-soon">Coming soon</div>
+            )}
+          </div>
+        ))}
 
-        <footer className="hub-footer">
-          <div className="hub-footer-logo">FEAT <em>Prototype</em></div>
-          <div>Evidence first. Scores second.</div>
-        </footer>
+        {/* Central circle */}
+        <div className="hub-centre">
+          <div className="hub-centre-title">FEAT</div>
+          <div className="hub-centre-sub">Functional Evidence-Based Assessment Tasks</div>
+        </div>
       </div>
     </div>
   );

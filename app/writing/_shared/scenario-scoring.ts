@@ -332,6 +332,55 @@ const FOCUS_TIPS: Record<string, Record<string, Record<Band, string>>> = {
       "needs-work": "Use this structure: 'I believe [position] because [reason]. For example, [evidence].' Then add one sentence acknowledging the other side to show balanced thinking.",
     },
   },
+  "data-literacy": {
+    "Problem Detection": {
+      strong: "",
+      developing: "When looking at a chart, check three things systematically: the axes (are they honest?), the sample (is it big enough?), and the question (did it change?).",
+      "needs-work": "Start with the y-axis. If it doesn't start at zero, ask why. Then check the sample size — 12 people is not the same as 1,200. These are the most common tricks in data presentation.",
+    },
+    "Causal Reasoning": {
+      strong: "",
+      developing: "Correlation is not causation. When two things happen at the same time, ask: what else changed? In this case, a competitor closing is a huge confounding variable.",
+      "needs-work": "Just because B happened after A doesn't mean A caused B. To establish causation, you need to rule out other explanations. List every other thing that changed in the same period.",
+    },
+    "Data Reinterpretation": {
+      strong: "",
+      developing: "An honest title states what was measured and what changed — without implying a cause. 'Satisfaction scores increased' is different from 'Training improved satisfaction.'",
+      "needs-work": "Your rewrite should remove any causal claim and acknowledge what changed. Try: '[Metric] changed from X to Y between [dates]' as a starting point, then add relevant context.",
+    },
+    "Communication Clarity": {
+      strong: "",
+      developing: "When writing for a non-technical audience, lead with what you know, then what you don't know, then what to do next. That structure works for almost any data summary.",
+      "needs-work": "A good board summary has three sentences: what the data shows, why we should be cautious about the conclusion, and what we should measure next. Keep it factual and constructive.",
+    },
+  },
+  "explain-simply": {
+    "Core Accuracy": {
+      strong: "",
+      developing: "Simplifying doesn't mean leaving things out. The core mechanism (interest earning interest) must be in your explanation — without it, the person won't understand why compound interest is special.",
+      "needs-work": "Check your explanation against this test: if someone only knew what you told them, would they understand why £1,000 grows faster in year 20 than year 1? If not, you've missed the key idea.",
+    },
+    "Jargon Removal": {
+      strong: "",
+      developing: "Every technical term is a barrier. 'Principal' means nothing to most people. 'The money you started with' means the same thing and costs nothing in accuracy.",
+      "needs-work": "Read your explanation aloud. Every word that a non-expert would need to look up is jargon. Replace it with everyday language. If you can't replace it, explain it in the same sentence.",
+    },
+    "Analogy Quality": {
+      strong: "",
+      developing: "A good analogy captures the mechanism, not just the outcome. A snowball works because it shows acceleration — the bigger it gets, the faster it grows. A ladder doesn't — it implies steady, linear progress.",
+      "needs-work": "The best analogies share the same structure as the concept. Compound interest accelerates over time. So your analogy needs to show something that speeds up, not just something that gets bigger.",
+    },
+    "Adaptation": {
+      strong: "",
+      developing: "When someone says 'so it's just more interest?' — they've understood the surface but missed the acceleration. Address that specific gap rather than repeating your original explanation.",
+      "needs-work": "When someone is confused, don't start over. Listen to what they said, identify the specific thing they've missed, and address only that. Their confusion tells you exactly where to focus.",
+    },
+    "Tone & Accessibility": {
+      strong: "",
+      developing: "The best explanations sound like a conversation, not a lecture. Use 'you' and 'your money' — make it personal. Avoid 'one should consider' or 'it is important to note.'",
+      "needs-work": "Imagine you're explaining this to a friend over coffee. That's the tone you want. Warm, direct, no showing off. The goal is their understanding, not your credibility.",
+    },
+  },
 };
 
 function buildLearnerFeedback(

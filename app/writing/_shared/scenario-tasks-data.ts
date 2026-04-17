@@ -598,6 +598,256 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
 };
 
 
+// ─── TASK 6: Data Literacy ────────────────────────────────────
+
+const DATA_LITERACY: ScenarioTaskDef = {
+  id: "data-literacy",
+  shortTitle: "Data Literacy",
+  accentColor: "#818cf8",
+  screens: [
+    {
+      kind: "briefing",
+      badge: "Academic Assessment",
+      title: "Data",
+      titleEmphasis: "Literacy",
+      subtitle: "Can you read data critically — not just accurately?",
+      objective: "Evaluate data presentations, identify misleading elements, and communicate what data actually shows.",
+      criteria: [
+        "Identifies misleading elements in data visualisation",
+        "Distinguishes correlation from causation",
+        "Recognises missing context or cherry-picked data",
+        "Communicates findings clearly to a non-technical audience",
+        "Makes evidence-based recommendations",
+      ],
+      stakeholder: [
+        { title: "Why this task exists", body: "Everyone encounters charts and statistics. Very few can evaluate them critically. This tests whether someone can spot problems in data presentation and explain what the data actually means." },
+        { title: "What it replaces", body: "Statistics quizzes that test calculation, not interpretation. This tests judgment: can you see what's wrong, and can you explain it?" },
+        { title: "How it is scored", body: "Problem identification accuracy, reasoning quality, ability to reinterpret data honestly, and communication clarity." },
+      ],
+    },
+    {
+      kind: "scenario",
+      label: "The chart",
+      title: "Your manager shares this data in a meeting",
+      body: "A bar chart is presented with the title: \"Customer Satisfaction Up 45% Since New Training Programme\"\n\nThe chart shows:\n• January: 62% satisfaction\n• June: 90% satisfaction\n\nThe y-axis starts at 55% (not zero).\nThe sample was 12 customers in January, 47 in June.\nThe new training programme started in March.\nA competitor closed down in April, sending their customers to your company.\nThe survey question changed from \"Are you satisfied?\" to \"Would you recommend us?\"",
+      pinAsReference: true,
+    },
+    {
+      kind: "multi-select",
+      label: "Problem identification",
+      question: "What problems can you identify with this data presentation? Select all that apply.",
+      options: [
+        { id: "a", text: "Truncated y-axis exaggerates the visual difference between January and June", correct: true },
+        { id: "b", text: "Different sample sizes (12 vs 47) make the comparison unreliable", correct: true },
+        { id: "c", text: "The survey question changed — the two numbers measure different things", correct: true },
+        { id: "d", text: "A competitor closing could explain the increase, not the training", correct: true },
+        { id: "e", text: "The colours used in the chart are misleading", correct: false },
+      ],
+      minSelect: 2,
+      maxSelect: 5,
+      requireJustification: true,
+      justificationPrompt: "Which problem is the most serious, and why?",
+      justificationMax: 80,
+    },
+    {
+      kind: "choice",
+      label: "Causation check",
+      question: "Can you conclude that the training programme caused the improvement?",
+      options: [
+        { id: "a", text: "Yes — the timing matches and satisfaction went up", quality: "poor" },
+        { id: "b", text: "No — there are too many confounding variables to make a causal claim", quality: "best" },
+        { id: "c", text: "Probably — the training likely contributed even if other factors were involved", quality: "acceptable" },
+        { id: "d", text: "We need more data before drawing any conclusion", quality: "acceptable" },
+      ],
+      requireJustification: true,
+      justificationPrompt: "Explain your reasoning. What would you need to establish causation?",
+      justificationMax: 80,
+    },
+    {
+      kind: "short-text",
+      label: "Honest summary",
+      question: "Rewrite the chart title to honestly reflect what the data shows. Then write 1–2 sentences explaining what we can and cannot conclude.",
+      constraints: [
+        "Maximum 60 words",
+        "New title must be accurate",
+        "State what the data shows AND what it doesn't prove",
+      ],
+      maxWords: 60,
+      scoringHints: [
+        "Title avoids causal language ('up 45% since…')",
+        "Acknowledges the different measures or sample sizes",
+        "Separates what the data shows from what it doesn't prove",
+        "Doesn't dismiss the data entirely — notes what is useful",
+      ],
+    },
+    {
+      kind: "update",
+      label: "New request",
+      title: "Your manager wants to present this to the board.",
+      body: "They ask you to write a short summary for the board pack. They want it to be positive but accurate.\n\n\"We can't show them a chart with problems. Help me present this honestly but constructively.\"",
+    },
+    {
+      kind: "short-text",
+      label: "Board summary",
+      question: "Write a 2–3 sentence summary for the board that is honest about the data but constructive about next steps.",
+      constraints: [
+        "Maximum 80 words",
+        "Acknowledge what the data shows",
+        "Be honest about limitations",
+        "Suggest what to measure next",
+      ],
+      maxWords: 80,
+      scoringHints: [
+        "Doesn't overstate the positive trend",
+        "Mentions limitations without being dismissive",
+        "Suggests a concrete next step (e.g., standardise the survey, control for the competitor effect)",
+        "Professional tone appropriate for a board audience",
+        "Constructive — frames limitations as opportunities to improve measurement",
+      ],
+    },
+  ],
+  scoringDimensions: [
+    { name: "Problem Detection", description: "Spotted the real issues — not surface-level observations" },
+    { name: "Causal Reasoning", description: "Distinguished correlation from causation correctly" },
+    { name: "Data Reinterpretation", description: "Rewrote honestly without distorting or dismissing" },
+    { name: "Communication Clarity", description: "Explained findings clearly for a non-technical audience" },
+  ],
+};
+
+
+// ─── TASK 7: Explain Simply ──────────────────────────────────
+
+const EXPLAIN_SIMPLY: ScenarioTaskDef = {
+  id: "explain-simply",
+  shortTitle: "Explain Simply",
+  accentColor: "#f472b6",
+  screens: [
+    {
+      kind: "briefing",
+      badge: "Academic Assessment",
+      title: "Explain",
+      titleEmphasis: "Simply",
+      subtitle: "If you can't explain it simply, you don't understand it well enough.",
+      objective: "Take a complex concept and explain it clearly to someone with no background knowledge.",
+      criteria: [
+        "Identifies the core idea accurately",
+        "Removes unnecessary jargon",
+        "Uses effective analogies or examples",
+        "Adapts when the audience shows confusion",
+        "Maintains accuracy while simplifying",
+      ],
+      stakeholder: [
+        { title: "Why this task exists", body: "Explaining a complex idea simply is the hardest test of understanding. If someone can only explain it using technical language, they may be reciting — not understanding." },
+        { title: "What it replaces", body: "Written exams that reward technical vocabulary. This rewards clarity, accuracy, and the ability to make an idea accessible." },
+        { title: "How it is scored", body: "Accuracy of the core explanation, absence of unnecessary jargon, quality of analogies, and ability to adapt when the audience is confused." },
+      ],
+    },
+    {
+      kind: "scenario",
+      label: "The concept",
+      title: "You need to explain this concept",
+      body: "Compound interest\n\nA colleague who has never studied finance asks you: \"My bank keeps talking about compound interest. What actually is it? Why does everyone say it matters?\"\n\nThey are intelligent but have no financial background. They need to understand the concept well enough to make a decision about a savings account.",
+      pinAsReference: true,
+    },
+    {
+      kind: "choice",
+      label: "Approach",
+      question: "Which explanation approach would work best for this person?",
+      options: [
+        { id: "a", text: "Define it technically: 'Compound interest is interest calculated on the initial principal and accumulated interest from previous periods'", quality: "poor" },
+        { id: "b", text: "Use a simple analogy: compare it to something they already understand, like a snowball rolling downhill", quality: "best" },
+        { id: "c", text: "Give them a formula and work through an example with numbers", quality: "acceptable" },
+        { id: "d", text: "Tell them it doesn't matter — just pick the account with the highest rate", quality: "poor" },
+      ],
+      requireJustification: true,
+      justificationPrompt: "Why is this the best approach for this particular person?",
+      justificationMax: 60,
+    },
+    {
+      kind: "short-text",
+      label: "Your explanation",
+      question: "Write your explanation of compound interest for this person. Remember: they're intelligent but have zero financial background.",
+      constraints: [
+        "Maximum 100 words",
+        "No jargon or technical terms",
+        "Must be accurate — don't oversimplify to the point of being wrong",
+        "Include why it matters, not just what it is",
+      ],
+      maxWords: 100,
+      scoringHints: [
+        "Core concept is correct (interest on interest, not just on the original amount)",
+        "No unexplained jargon (principal, APR, etc.)",
+        "Uses a concrete example, analogy, or comparison",
+        "Explains why it matters (money grows faster over time)",
+        "Accessible tone — sounds like talking to a person, not reading a textbook",
+      ],
+    },
+    {
+      kind: "multi-select",
+      label: "Spot the problems",
+      question: "A trainee wrote these explanations. Which ones have problems?",
+      options: [
+        { id: "a", text: "\"Compound interest is when your interest earns interest. So your money grows faster the longer you leave it.\"", correct: false },
+        { id: "b", text: "\"It's basically exponential growth applied to financial instruments with a fixed or variable rate of return.\"", correct: true },
+        { id: "c", text: "\"Think of it like a snowball. It starts small, but as it rolls, it picks up more snow. Your money does the same — the bigger it gets, the faster it grows.\"", correct: false },
+        { id: "d", text: "\"Compound interest means you get free money from the bank. The longer you wait, the more free money you get.\"", correct: true },
+      ],
+      minSelect: 1,
+      maxSelect: 3,
+      requireJustification: true,
+      justificationPrompt: "What's wrong with the ones you selected?",
+      justificationMax: 80,
+    },
+    {
+      kind: "update",
+      label: "Confusion",
+      title: "They're confused.",
+      body: "Your colleague responds:\n\n\"OK, I think I get it — so it's just the same as normal interest but more? Why does everyone make such a big deal about it?\"\n\nThey've understood the surface but missed the key insight — the compounding effect over time.",
+    },
+    {
+      kind: "short-text",
+      label: "Clarify",
+      question: "They've missed the point. Write a follow-up that clarifies the key insight — why compound interest is fundamentally different from simple interest — without making them feel stupid.",
+      constraints: [
+        "Maximum 80 words",
+        "Address their specific misunderstanding",
+        "Use a concrete example with numbers if it helps",
+        "Encouraging tone",
+      ],
+      maxWords: 80,
+      scoringHints: [
+        "Identifies their gap: they think it's just 'more interest' not 'accelerating interest'",
+        "Uses a concrete example (e.g., £1000 over 10 years vs 30 years)",
+        "Shows the acceleration — not just that it's more, but that the growth speeds up",
+        "Doesn't patronise — builds on what they already understood",
+        "Tone is encouraging, not corrective",
+      ],
+    },
+    {
+      kind: "choice",
+      label: "Analogy check",
+      question: "Which analogy best captures the KEY insight of compound interest (that growth accelerates over time)?",
+      options: [
+        { id: "a", text: "A snowball rolling downhill — it picks up more snow the bigger it gets", quality: "best" },
+        { id: "b", text: "A ladder — each rung takes you a step higher", quality: "poor" },
+        { id: "c", text: "A tree growing — it takes years but eventually it's huge", quality: "acceptable" },
+        { id: "d", text: "Filling a bucket — the more you add, the fuller it gets", quality: "poor" },
+      ],
+      requireJustification: true,
+      justificationPrompt: "Why does this analogy work better than the others?",
+      justificationMax: 60,
+    },
+  ],
+  scoringDimensions: [
+    { name: "Core Accuracy", description: "The explanation was correct — not oversimplified to the point of being wrong" },
+    { name: "Jargon Removal", description: "Technical terms removed or explained — accessible language throughout" },
+    { name: "Analogy Quality", description: "Used effective comparisons that illuminate rather than obscure" },
+    { name: "Adaptation", description: "Responded to confusion by clarifying the specific gap — not just repeating" },
+    { name: "Tone & Accessibility", description: "Warm, encouraging, and respectful — not patronising or academic" },
+  ],
+};
+
+
 // ─── Export all tasks ──────────────────────────────────────────
 
 export const SCENARIO_TASKS: Record<string, ScenarioTaskDef> = {
@@ -606,6 +856,9 @@ export const SCENARIO_TASKS: Record<string, ScenarioTaskDef> = {
   "ai-policy": AI_POLICY,
   "info-priority": INFO_PRIORITY,
   argument: ARGUMENT_EVAL,
+  "data-literacy": DATA_LITERACY,
+  "explain-simply": EXPLAIN_SIMPLY,
 };
 
 export const SCENARIO_TASK_LIST = [OJT, CPD, AI_POLICY, INFO_PRIORITY, ARGUMENT_EVAL];
+export const ACADEMIC_TASK_LIST = [DATA_LITERACY, EXPLAIN_SIMPLY];
