@@ -65,8 +65,8 @@ const pageStyles = `
 .vl-task-card:hover .vl-task-card-cta { opacity:1 }
 
 .vl-cta { text-align:center; padding:0 24px 80px }
-.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.72rem; color:var(--s-text-muted); text-decoration:none; margin-top:16px; transition:color .2s }
-.vl-back:hover { color:var(--s-text) }
+.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.65rem; font-weight:600; color:var(--s-text-muted); text-decoration:none; margin-top:20px; padding:4px 12px; border:1px solid rgba(255,255,255,.1); border-radius:16px; transition:border-color .2s, color .2s }
+.vl-back:hover { color:var(--s-text); border-color:rgba(255,255,255,.2) }
 .vl-footer { padding:20px 36px; border-top:1px solid rgba(255,255,255,.06); display:flex; align-items:center; justify-content:space-between; font-size:.7rem; color:#475569 }
 .vl-footer-logo { font-family:'DM Serif Display',serif; font-size:.85rem; color:#475569 }
 .vl-footer-logo em { font-style:italic }
@@ -79,7 +79,7 @@ export default function CefrLandingPage() {
       <div className="vl">
         <nav className="vl-nav">
           <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>CEFR</em></Link>
-          <Link href="/task/01" style={{ fontSize: ".68rem", fontWeight: 600, color: accent, textDecoration: "none", padding: "6px 14px", border: `1px solid rgba(56,189,248,.2)`, borderRadius: 8, transition: "border-color .2s" }}>Begin Test Demo</Link>
+          <Link href="/task/01" style={{ fontSize: ".6rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".08em", color: accent, textDecoration: "none", padding: "6px 16px", border: `1.5px solid ${accent}`, borderRadius: 20, background: "transparent", transition: "background .2s" }}>Try demo {ARROW}</Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">

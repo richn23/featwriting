@@ -43,9 +43,11 @@ const pageStyles = `
 .vl-task-card-name { font-size:.82rem; font-weight:600; color:var(--s-text); margin-bottom:4px }
 .vl-task-card-dims { font-size:.6rem; color:var(--s-text-muted); line-height:1.5 }
 
+.vl-nav-cta { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:6px 16px; border-radius:20px; text-decoration:none; border:1.5px solid currentColor; background:transparent; transition:background .2s }
+.vl-nav-cta:hover { background:rgba(255,255,255,.06) }
 .vl-cta { text-align:center; padding:0 24px 80px }
-.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.72rem; color:var(--s-text-muted); text-decoration:none; margin-top:16px; transition:color .2s }
-.vl-back:hover { color:var(--s-text) }
+.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.65rem; font-weight:600; color:var(--s-text-muted); text-decoration:none; margin-top:20px; padding:4px 12px; border:1px solid rgba(255,255,255,.1); border-radius:16px; transition:border-color .2s, color .2s }
+.vl-back:hover { color:var(--s-text); border-color:rgba(255,255,255,.2) }
 .vl-footer { padding:20px 36px; border-top:1px solid rgba(255,255,255,.06); display:flex; align-items:center; justify-content:space-between; font-size:.7rem; color:#475569 }
 .vl-footer-logo { font-family:'DM Serif Display',serif; font-size:.85rem; color:#475569 }
 .vl-footer-logo em { font-style:italic }
@@ -58,6 +60,7 @@ export default function ProfessionalPage() {
       <div className="vl">
         <nav className="vl-nav">
           <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Professional</em></Link>
+          <Link href="/beyond/ojt" className="vl-nav-cta" style={{ color: accent }}>Try demo {ARROW}</Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">

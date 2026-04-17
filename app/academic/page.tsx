@@ -95,8 +95,8 @@ const pageStyles = `
 .vl-task-card:hover .vl-task-card-cta { opacity:1 }
 .vl-task-new-badge { font-size:.5rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:2px 8px; border-radius:10px; background:rgba(167,139,250,.15); color:#a78bfa }
 .vl-cta { text-align:center; padding:0 24px 80px }
-.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.72rem; color:var(--s-text-muted); text-decoration:none; margin-top:16px; transition:color .2s }
-.vl-back:hover { color:var(--s-text) }
+.vl-back { display:inline-flex; align-items:center; gap:6px; font-size:.65rem; font-weight:600; color:var(--s-text-muted); text-decoration:none; margin-top:20px; padding:4px 12px; border:1px solid rgba(255,255,255,.1); border-radius:16px; transition:border-color .2s, color .2s }
+.vl-back:hover { color:var(--s-text); border-color:rgba(255,255,255,.2) }
 .vl-footer { padding:20px 36px; border-top:1px solid rgba(255,255,255,.06); display:flex; align-items:center; justify-content:space-between; font-size:.7rem; color:#475569 }
 .vl-footer-logo { font-family:'DM Serif Display',serif; font-size:.85rem; color:#475569 }
 .vl-footer-logo em { font-style:italic }
