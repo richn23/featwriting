@@ -83,10 +83,10 @@ export default function CefrLandingPage() {
         </nav>
 
         <div className="vl-hero animate-fade-up">
-          <div className="vl-eyebrow" style={{ color: accent }}>Progress &amp; Placement Assessment</div>
-          <h1 className="vl-title">Not just your <em style={{ color: accent }}>level.</em><br />Your <em style={{ color: accent }}>trajectory.</em></h1>
+          <div className="vl-eyebrow" style={{ color: accent }}>Diagnostic &amp; Placement Writing Assessment</div>
+          <h1 className="vl-title">Function first.<br /><em style={{ color: accent }}>Form second.</em></h1>
           <p className="vl-sub">
-            CEFR levels give a broad picture of ability. But they don&apos;t show how learning is progressing, or which objectives are actually secure. FEAT measures both. It tracks what has been learned, what can be applied, and where gaps remain. Over time, and at the point of entry. Progress testing, objective tracking, and accurate placement, all based on demonstrated performance, not single scores.
+            Most writing tests measure accuracy: grammar, vocabulary, format. FEAT CEFR measures what the learner can actually do with written language. Five interactive tasks test communicative function against CEFR descriptors through live AI interaction. The output is two profiles: what they can do (function) and how well they do it (form). Diagnostic, placement-ready, and grounded in evidence.
           </p>
         </div>
 
@@ -94,44 +94,44 @@ export default function CefrLandingPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Progress testing.</strong> Has learning actually transferred? Assessment is aligned to recent learning objectives. The system checks whether learners can apply what was taught, not just recognise it.
+              <strong>Live AI interaction.</strong> No static prompts. The AI examiner adapts in real time, probing, challenging, and following up based on what the learner writes. Each task targets a different communicative function.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Objective-level tracking.</strong> What is secure, and what is not yet stable? Performance is mapped to specific learning objectives. You see exactly where competence is confirmed and where it breaks down.
+              <strong>Function, not format.</strong> Tasks are built around CEFR communicative functions: interact, inform, argue, rephrase, mediate. The question is not &ldquo;write an essay&rdquo; but &ldquo;can you do this thing with language?&rdquo;
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>03</div>
             <div className="vl-point-body">
-              <strong>Placement testing.</strong> Where should the learner start? Initial assessment identifies the highest level where performance is consistent, not just occasional success. Placement reflects demonstrated ability, not test-taking strategy.
+              <strong>Two profiles, not one score.</strong> Every candidate gets a function profile (what they can do) and a form profile (grammar, vocabulary, coherence). Jagged profiles are expected, not hidden. Both inform placement.
             </div>
           </div>
         </div>
 
         <div className="vl-beyond animate-fade-up" style={{ animationDelay: "100ms" }}>
-          <div className="vl-beyond-title">Beyond <em style={{ color: accent }}>one-off testing</em></div>
+          <div className="vl-beyond-title">Beyond <em style={{ color: accent }}>accuracy testing</em></div>
           <div className="vl-beyond-cols">
             <div>
-              <div className="vl-beyond-col-title">Traditional tests</div>
+              <div className="vl-beyond-col-title">Traditional writing tests</div>
               <ul className="vl-beyond-col-list">
-                <li style={{ borderColor: "#64748b" }}>Give a single score</li>
-                <li style={{ borderColor: "#64748b" }}>Focus on isolated items</li>
-                <li style={{ borderColor: "#64748b" }}>Reward short-term recall</li>
+                <li style={{ borderColor: "#64748b" }}>One score for everything</li>
+                <li style={{ borderColor: "#64748b" }}>Static prompts, timed conditions</li>
+                <li style={{ borderColor: "#64748b" }}>Accuracy drives the level</li>
               </ul>
             </div>
             <div>
-              <div className="vl-beyond-col-title" style={{ color: accent }}>FEAT</div>
+              <div className="vl-beyond-col-title" style={{ color: accent }}>FEAT CEFR</div>
               <ul className="vl-beyond-col-list">
-                <li style={{ borderColor: accent }}>Builds a performance profile over time</li>
-                <li style={{ borderColor: accent }}>Confirms consistency, not one-off success</li>
-                <li style={{ borderColor: accent }}>Measures application against real objectives</li>
+                <li style={{ borderColor: accent }}>Separate function and form profiles</li>
+                <li style={{ borderColor: accent }}>Live interaction, adaptive difficulty</li>
+                <li style={{ borderColor: accent }}>Communication drives the level</li>
               </ul>
             </div>
           </div>
-          <div className="vl-beyond-close"><em style={{ color: accent }}>If it hasn&apos;t transferred, it hasn&apos;t been learned.</em></div>
+          <div className="vl-beyond-close"><em style={{ color: accent }}>We test the communication, not just the language.</em></div>
         </div>
 
         <div className="vl-usecases animate-fade-up" style={{ animationDelay: "120ms" }}>
@@ -153,7 +153,7 @@ export default function CefrLandingPage() {
         <div className="vl-tasks animate-fade-up" style={{ animationDelay: "160ms" }}>
           <div className="vl-tasks-title">Demo task structure</div>
           {TASK_CARDS.map(t => (
-            <Link key={t.num} href={`/writing/task/${t.id}`} className="vl-task-card">
+            <Link key={t.num} href={`/task/${t.id}`} className="vl-task-card">
               <div className="vl-task-card-top">
                 <div className="vl-task-card-num" style={{ color: accent }}>{t.num}</div>
                 <div className="vl-task-card-fn" style={{ color: accent }}>{t.fn}</div>

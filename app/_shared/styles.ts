@@ -729,8 +729,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .sb-reassurance { font-size:.8rem; color:var(--s-text-muted); text-align:center; margin:20px 0 24px; padding:12px 16px; border-radius:10px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); font-style:italic }
 .sb-start-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:18px 24px; font-family:'DM Sans',sans-serif; font-size:1rem; font-weight:600; color:#0f172a; background:var(--s-accent); border:none; border-radius:14px; cursor:pointer; transition:all .2s ease; box-shadow:0 4px 20px rgba(52,211,153,.25) }
 .sb-start-btn:hover { background:#2dd4a8; transform:translateY(-1px) }
-.sb-right { background:rgba(15,23,42,.7); border:1px solid rgba(255,255,255,.05); border-radius:20px; padding:28px 24px; box-shadow:0 8px 32px rgba(0,0,0,.2) }
-.sb-right-label { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.16em; color:var(--s-text-muted); padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,.06); margin-bottom:16px }
+.sb-right { background:var(--s-surface); border:1px solid var(--s-surface-border); border-radius:20px; padding:28px 24px; box-shadow:0 8px 32px rgba(0,0,0,.2) }
+.sb-right-label { display:none }
 .sb-right-section { margin-bottom:16px }
 .sb-right-section:last-child { margin-bottom:0 }
 .sb-right-section-title { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--s-accent); margin-bottom:6px }

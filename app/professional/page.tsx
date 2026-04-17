@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { writingStyles } from "../_shared/styles";
-import { SCENARIO_TASK_LIST } from "../_shared/scenario-tasks-data";
+import { PROFESSIONAL_TASK_LIST } from "../_shared/scenario-tasks-data";
 
 const ARROW = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
@@ -107,10 +107,10 @@ export default function ProfessionalPage() {
         </div>
 
         <div className="vl-tasks animate-fade-up" style={{ animationDelay: "120ms" }}>
-          <div className="vl-tasks-title">Five workplace readiness tasks</div>
+          <div className="vl-tasks-title">Example workplace readiness tasks</div>
           <div className="vl-tasks-grid">
-            {SCENARIO_TASK_LIST.map(t => (
-              <Link key={t.id} href={`/writing/beyond/${t.id}`} className="vl-task-card">
+            {PROFESSIONAL_TASK_LIST.map(t => (
+              <Link key={t.id} href={`/beyond/${t.id}`} className="vl-task-card">
                 <div className="vl-task-card-name" style={{ color: accent }}>{t.shortTitle}</div>
                 <div className="vl-task-card-dims">{t.scoringDimensions.map(d => d.name).join(" · ")}</div>
               </Link>

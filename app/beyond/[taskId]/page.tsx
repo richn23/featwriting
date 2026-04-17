@@ -13,7 +13,7 @@ export default function BeyondTaskPage() {
       <main style={{ padding: 40, color: "#e6edf3", background: "#0d1117", minHeight: "100vh" }}>
         <h1>Task not found</h1>
         <p>No scenario task with id &quot;{taskId}&quot;.</p>
-        <a href="/writing" style={{ color: "#34d399" }}>Back to FEAT</a>
+        <a href="/" style={{ color: "#34d399" }}>Back to FEAT</a>
       </main>
     );
   }

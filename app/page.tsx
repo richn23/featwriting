@@ -26,7 +26,7 @@ const SEGMENTS = [
   {
     id: "academic",
     label: "Academic",
-    sub: "Formative Assessment",
+    sub: "Rethinking Academic Assessment",
     href: "/academic",
     bg: "rgba(192,132,252,.28)",
     accent: "#C084FC",
@@ -53,7 +53,7 @@ const SEGMENTS = [
   {
     id: "cefr",
     label: "CEFR",
-    sub: "Progress & Placement",
+    sub: "Diagnostic & Placement",
     href: "/cefr",
     bg: "rgba(34,211,238,.28)",
     accent: "#22D3EE",
@@ -189,28 +189,55 @@ const hubStyles = `
 }
 .hub-brochure:hover { border-color:rgba(255,255,255,.5); color:#fff; background:rgba(255,255,255,.05) }
 
+/* Mobile card list (replaces wedge layout) */
+.hub-mobile-list {
+  display:none;
+}
+
 /* Mobile */
 @media (max-width:700px) {
-  .hub { height:auto; min-height:100vh; }
-  .hub-wedge {
-    position:relative !important; clip-path:none !important;
-    inset:auto !important; width:100%; padding:28px 24px;
-    border-bottom:1px solid rgba(255,255,255,.06);
-    justify-content:flex-start;
-  }
-  .hub-wedge:hover { filter:brightness(1.3) }
+  .hub { height:auto; min-height:100vh; display:flex; flex-direction:column; }
+  .hub-wedge { display:none !important; }
+  .hub-label { display:none !important; }
   .hub-centre {
     position:relative; transform:none;
     left:auto; top:auto; width:100%; height:auto;
-    border-radius:0; padding:32px 24px;
+    border-radius:0; padding:40px 24px 32px;
     border-bottom:1px solid rgba(255,255,255,.06);
-    box-shadow:none;
+    box-shadow:none; order:999;
+    background:radial-gradient(circle at center, #141b24 0%, #0f1520 100%);
   }
-  .hub-label {
-    position:relative !important; transform:none !important;
-    left:auto !important; top:auto !important;
-    text-align:left;
+  .hub-centre-title { font-size:2.2rem; }
+  .hub-centre-sub { font-size:.7rem; margin-top:6px; }
+  .hub-brochure {
+    position:relative; top:auto; right:auto;
+    margin:16px 24px 0; align-self:flex-end;
   }
+  .hub-mobile-list {
+    display:flex; flex-direction:column; flex:1;
+  }
+  .hub-mobile-card {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 24px;
+    text-decoration:none; color:inherit;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    transition:filter .2s;
+  }
+  .hub-mobile-card:hover { filter:brightness(1.3); }
+  .hub-mobile-card-info { display:flex; flex-direction:column; gap:4px; }
+  .hub-mobile-card-name {
+    font-family:'DM Serif Display',serif;
+    font-size:1.3rem; font-weight:400; font-style:italic;
+    line-height:1.2;
+  }
+  .hub-mobile-card-sub {
+    font-size:.6rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.1em; opacity:.7;
+  }
+  .hub-mobile-card-arrow {
+    opacity:.5; transition:opacity .2s;
+  }
+  .hub-mobile-card:hover .hub-mobile-card-arrow { opacity:1; }
 }
 `;
 
@@ -268,6 +295,24 @@ export default function WritingHomePage() {
             )}
           </div>
         ))}
+
+        {/* Mobile card list (hidden on desktop, shown on mobile) */}
+        <div className="hub-mobile-list">
+          {SEGMENTS.map((seg) => (
+            <Link
+              key={`m-${seg.id}`}
+              href={seg.href}
+              className="hub-mobile-card"
+              style={{ background: seg.bg }}
+            >
+              <div className="hub-mobile-card-info">
+                <div className="hub-mobile-card-name" style={{ color: seg.accent }}>{seg.label}</div>
+                <div className="hub-mobile-card-sub" style={{ color: seg.accent }}>{seg.sub}</div>
+              </div>
+              <div className="hub-mobile-card-arrow" style={{ color: seg.accent }}>{ARROW}</div>
+            </Link>
+          ))}
+        </div>
 
         {/* Central circle */}
         <div className="hub-centre">

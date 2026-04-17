@@ -26,27 +26,11 @@ const DEMO_TASKS = [
     isNew: true,
   },
   {
-    id: "cpd",
-    name: "Applied CPD",
-    desc: "Can the learner apply training to a real classroom problem? Diagnose, strategise, prioritise under constraints.",
-    dims: "Problem Diagnosis · Strategy Practicality · Decision Quality",
-    href: "/beyond/cpd",
-    isNew: false,
-  },
-  {
     id: "argument",
     name: "Argument Evaluation",
     desc: "Break down two arguments, judge their quality, identify weaknesses, select evidence, construct a position.",
     dims: "Claim Identification · Evaluation Quality · Argument Construction",
     href: "/beyond/argument",
-    isNew: false,
-  },
-  {
-    id: "ai-policy",
-    name: "AI Output Evaluation",
-    desc: "Evaluate AI-generated content against quality standards and organisational policy. Adapt it for real use.",
-    dims: "Risk Detection · Policy Alignment · Adaptation Quality",
-    href: "/beyond/ai-policy",
     isNew: false,
   },
 ];
@@ -175,7 +159,7 @@ export default function AcademicPage() {
         </div>
 
         <div className="vl-tasks animate-fade-up" style={{ animationDelay: "160ms" }}>
-          <div className="vl-tasks-title">Try the demo tasks</div>
+          <div className="vl-tasks-title">Example academic tasks</div>
           {DEMO_TASKS.map(t => (
             <Link key={t.id} href={t.href} className="vl-task-card">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
