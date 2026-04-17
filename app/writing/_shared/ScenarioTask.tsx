@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import type { ScenarioTaskDef, Screen } from "./scenario-types";
 import { writingStyles } from "./styles";
+import { scoreTask, bandLabel, type TaskReport, type Band } from "./scenario-scoring";
 
 // ─── Word counter ──────────────────────────────────────────────
 function wordCount(text: string): number {
@@ -30,6 +31,7 @@ export function ScenarioTask({ task }: Props) {
   const [currentJustification, setCurrentJustification] = useState("");
   const [currentRanking, setCurrentRanking] = useState<string[]>([]);
   const [phase, setPhase] = useState<"active" | "results">("active");
+  const [pinnedRefs, setPinnedRefs] = useState<{ label: string; title: string; body: string }[]>([]);
   const dragItem = useRef<number | null>(null);
 
   const screen = task.screens[screenIdx];
@@ -49,6 +51,12 @@ export function ScenarioTask({ task }: Props) {
     if (screen.kind !== "briefing" && screen.kind !== "scenario" && screen.kind !== "update") {
       saveAnswer();
     }
+
+    // Collect pinned reference content from scenario/update screens
+    if (screen.kind === "scenario" && screen.pinAsReference) {
+      setPinnedRefs(prev => [...prev, { label: screen.label, title: screen.title, body: screen.body }]);
+    }
+
     if (isLast) {
       if (screen.kind !== "briefing" && screen.kind !== "scenario" && screen.kind !== "update") {
         saveAnswer();
@@ -94,6 +102,9 @@ export function ScenarioTask({ task }: Props) {
 
   // ─── RESULTS ──────────────────────────────────────────────────
   if (phase === "results") {
+    const report = scoreTask(task, answers);
+    const bandColor = (b: Band) => b === "strong" ? "#34d399" : b === "developing" ? "#fbbf24" : "#f87171";
+
     return wrap(
       <main className="sc-results-page">
         <nav className="results-nav">
@@ -105,32 +116,118 @@ export function ScenarioTask({ task }: Props) {
           <h1 className="sc-results-title">{task.shortTitle} <em>Results</em></h1>
           <p className="sc-results-sub">Here&apos;s how your responses map to the scoring criteria.</p>
         </div>
+
+        {/* Prototype disclaimer */}
+        <div className="sc-results-proto-note animate-fade-up" style={{ animationDelay: "60ms" }}>
+          <div className="sc-proto-icon">⚙</div>
+          <div>
+            <div className="sc-proto-title">Prototype — basic feedback only</div>
+            <div className="sc-proto-body">
+              This feedback is based on <em>basic descriptors</em> and is only meant to demonstrate the system — not a finished product. In production, descriptors would be fully calibrated and free-text responses would be evaluated by an AI judge.
+            </div>
+          </div>
+        </div>
+
+        {/* Overall band */}
+        <div className="sc-overall-band animate-fade-up" style={{ animationDelay: "80ms" }}>
+          <div className="sc-overall-band-label">Overall performance</div>
+          <div className="sc-overall-band-value" style={{ color: bandColor(report.overallBand) }}>
+            {bandLabel(report.overallBand)}
+          </div>
+          <div className="sc-overall-band-bar">
+            <div className="sc-overall-band-fill" style={{ width: `${Math.round(report.overallScore * 100)}%`, background: bandColor(report.overallBand) }} />
+          </div>
+          <div className="sc-overall-band-pct">{Math.round(report.overallScore * 100)}%</div>
+        </div>
+
+        {/* Learner feedback */}
+        <div className="sc-learner-feedback animate-fade-up" style={{ animationDelay: "90ms" }}>
+          <div className="sc-lf-header">
+            <div className="sc-lf-icon">💬</div>
+            <div className="sc-lf-title">Your feedback</div>
+          </div>
+          <div className="sc-lf-strength">{report.learnerFeedback.strength}</div>
+          {report.learnerFeedback.focusAreas.length > 0 && (
+            <div className="sc-lf-focus">
+              <div className="sc-lf-focus-title">What to focus on</div>
+              {report.learnerFeedback.focusAreas.map((tip, i) => (
+                <div key={i} className="sc-lf-focus-item">
+                  <span className="sc-lf-focus-num" style={{ color: accent }}>{i + 1}</span>
+                  <span>{tip}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="sc-lf-next">
+            <div className="sc-lf-next-label" style={{ color: accent }}>Next step</div>
+            <div className="sc-lf-next-body">{report.learnerFeedback.nextStep}</div>
+          </div>
+        </div>
+
+        {/* Dimension cards with bands */}
         <div className="sc-results-grid animate-fade-up" style={{ animationDelay: "100ms" }}>
-          {task.scoringDimensions.map((dim, i) => (
+          {report.dimensions.map((dim, i) => (
             <div key={dim.name} className="sc-results-dim" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="sc-results-dim-band-dot" style={{ background: bandColor(dim.band) }} />
               <div className="sc-results-dim-name" style={{ color: accent }}>{dim.name}</div>
+              <div className="sc-results-dim-band-tag" style={{ color: bandColor(dim.band), borderColor: bandColor(dim.band) + "40" }}>
+                {bandLabel(dim.band)}
+              </div>
               <div className="sc-results-dim-desc">{dim.description}</div>
+              <div className="sc-results-dim-feedback">{dim.feedback}</div>
             </div>
           ))}
         </div>
+
+        {/* Per-screen feedback */}
         <div className="sc-results-answers animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <div className="sc-results-answers-title">Your responses</div>
-          {answers.map((a, i) => {
-            const s = task.screens[a.screenIndex];
-            const label = "label" in s ? (s as { label: string }).label : `Screen ${a.screenIndex + 1}`;
+          <div className="sc-results-answers-title">Screen-by-screen feedback</div>
+          {report.screenFeedback.map((sf, i) => {
+            const s = task.screens[sf.screenIndex];
+            const a = answers.find(ans => ans.screenIndex === sf.screenIndex);
             return (
               <div key={i} className="sc-results-answer">
-                <div className="sc-results-answer-label">{label}</div>
-                {a.choice && <div className="sc-results-answer-val">Selected: {getOptionText(s, a.choice)}</div>}
-                {a.selections && <div className="sc-results-answer-val">Selected: {a.selections.map(id => getOptionText(s, id)).join(", ")}</div>}
-                {a.ranking && <div className="sc-results-answer-val">Ranked: {a.ranking.map((id, j) => `${j + 1}. ${getRankText(s, id)}`).join(" → ")}</div>}
-                {a.text && <div className="sc-results-answer-text">{a.text}</div>}
+                <div className="sc-results-answer-header">
+                  <div className="sc-results-answer-label">{sf.label}</div>
+                  <div className="sc-results-answer-band" style={{ color: bandColor(sf.band), borderColor: bandColor(sf.band) + "40" }}>
+                    {bandLabel(sf.band)}
+                  </div>
+                </div>
+
+                {/* What they answered */}
+                {a?.choice && <div className="sc-results-answer-val">Your answer: {getOptionText(s, a.choice)}</div>}
+                {a?.selections && <div className="sc-results-answer-val">You selected: {a.selections.map(id => getOptionText(s, id)).join("; ")}</div>}
+                {a?.ranking && <div className="sc-results-answer-val">Your ranking: {a.ranking.map((id, j) => `${j + 1}. ${getRankText(s, id)}`).join(" → ")}</div>}
+                {a?.text && <div className="sc-results-answer-text">{a.text}</div>}
+
+                {/* Feedback */}
+                <div className="sc-results-feedback-line">{sf.feedback}</div>
+
+                {/* Best answer hint */}
+                {sf.bestAnswer && (
+                  <div className="sc-results-best-hint">
+                    <span className="sc-results-best-hint-label">Better option:</span> {sf.bestAnswer}
+                  </div>
+                )}
+
+                {/* Scoring hints for free-text */}
+                {sf.scoringHints && sf.scoringHints.length > 0 && (
+                  <div className="sc-results-hints">
+                    <div className="sc-results-hints-title">What we look for:</div>
+                    {sf.scoringHints.map((h, j) => (
+                      <div key={j} className="sc-results-hint-item">
+                        <span className="sc-results-hint-check" style={{ color: accent }}>○</span> {h}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+
         <div className="animate-fade-up" style={{ animationDelay: "300ms", textAlign: "center", marginTop: 28 }}>
-          <Link href="/writing" className="btn-continue-new">Back to FEAT</Link>
+          <Link href="/writing/beyond" className="btn-continue-new">Back to FEAT Beyond</Link>
         </div>
       </main>
     );
@@ -192,23 +289,54 @@ export function ScenarioTask({ task }: Props) {
       </nav>
       <div className="sc-progress-bar"><div className="sc-progress-fill" style={{ width: `${progress}%`, background: accent }} /></div>
 
-      <div className="sc-screen animate-fade-up" key={screenIdx}>
-        {renderScreen(screen, {
-          accent,
-          currentChoice, setCurrentChoice,
-          currentSelections, setCurrentSelections,
-          currentText, setCurrentText,
-          currentJustification, setCurrentJustification,
-          currentRanking, setCurrentRanking,
-          dragItem,
-        })}
-
-        <div className="sc-actions">
-          <button onClick={next} disabled={!canProceed()} className="sc-next-btn" style={{ background: canProceed() ? accent : "#334155" }}>
-            {isLast ? "See results" : "Continue"} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </button>
+      {pinnedRefs.length > 0 ? (
+        <div className="sc-split-layout">
+          <aside className="sc-ref-sidebar">
+            <div className="sc-ref-sidebar-label" style={{ color: accent }}>Reference material</div>
+            {pinnedRefs.map((ref, i) => (
+              <div key={i} className="sc-ref-panel">
+                <div className="sc-ref-panel-title">{ref.title}</div>
+                <div className="sc-ref-panel-body">{ref.body.split("\n").map((line, j) => <p key={j}>{line || "\u00A0"}</p>)}</div>
+              </div>
+            ))}
+          </aside>
+          <div className="sc-split-main">
+            <div className="sc-screen animate-fade-up" key={screenIdx}>
+              {renderScreen(screen, {
+                accent,
+                currentChoice, setCurrentChoice,
+                currentSelections, setCurrentSelections,
+                currentText, setCurrentText,
+                currentJustification, setCurrentJustification,
+                currentRanking, setCurrentRanking,
+                dragItem,
+              })}
+              <div className="sc-actions">
+                <button onClick={next} disabled={!canProceed()} className="sc-next-btn" style={{ background: canProceed() ? accent : "#334155" }}>
+                  {isLast ? "See results" : "Continue"} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="sc-screen animate-fade-up" key={screenIdx}>
+          {renderScreen(screen, {
+            accent,
+            currentChoice, setCurrentChoice,
+            currentSelections, setCurrentSelections,
+            currentText, setCurrentText,
+            currentJustification, setCurrentJustification,
+            currentRanking, setCurrentRanking,
+            dragItem,
+          })}
+          <div className="sc-actions">
+            <button onClick={next} disabled={!canProceed()} className="sc-next-btn" style={{ background: canProceed() ? accent : "#334155" }}>
+              {isLast ? "See results" : "Continue"} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -520,5 +648,62 @@ function scenarioStyles(accent: string): string {
 .sc-results-answer-label { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:${accent}; margin-bottom:6px }
 .sc-results-answer-val { font-size:.8rem; color:var(--s-text-muted); line-height:1.55; margin-bottom:4px }
 .sc-results-answer-text { font-size:.8rem; color:var(--s-text); line-height:1.65; white-space:pre-wrap; padding-top:6px; border-top:1px solid rgba(255,255,255,.04); margin-top:6px }
+
+/* Split layout with reference sidebar */
+.sc-split-layout { display:grid; grid-template-columns:380px 1fr; gap:0; max-width:1200px; margin:0 auto; min-height:calc(100vh - 80px) }
+@media (max-width:900px) { .sc-split-layout { grid-template-columns:1fr; } }
+.sc-ref-sidebar { padding:28px 24px; border-right:1px solid rgba(255,255,255,.06); overflow-y:auto; max-height:calc(100vh - 80px); position:sticky; top:50px }
+.sc-ref-sidebar-label { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.14em; margin-bottom:16px }
+.sc-ref-panel { background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:20px; margin-bottom:14px }
+.sc-ref-panel-title { font-family:'DM Serif Display',serif; font-size:.95rem; color:var(--s-text); margin-bottom:10px; line-height:1.3 }
+.sc-ref-panel-body { font-size:.75rem; color:var(--s-text-muted); line-height:1.7 }
+.sc-ref-panel-body p { margin-bottom:6px }
+.sc-split-main { padding:0 24px; overflow-y:auto }
+.sc-split-main .sc-screen { max-width:620px; margin:40px auto }
+
+/* Prototype disclaimer */
+.sc-results-proto-note { display:flex; gap:16px; align-items:flex-start; max-width:700px; margin:0 auto 32px; padding:20px 24px; background:rgba(251,191,36,.04); border:1px solid rgba(251,191,36,.15); border-radius:12px }
+.sc-proto-icon { font-size:1.2rem; flex-shrink:0; margin-top:2px }
+.sc-proto-title { font-size:.78rem; font-weight:700; color:#fbbf24; margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em }
+.sc-proto-body { font-size:.78rem; color:var(--s-text-muted); line-height:1.65 }
+.sc-proto-body em { color:var(--s-text); font-style:normal; font-weight:600 }
+/* Learner feedback */
+.sc-learner-feedback { max-width:700px; margin:0 auto 32px; padding:28px 28px 24px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:16px }
+.sc-lf-header { display:flex; align-items:center; gap:10px; margin-bottom:16px }
+.sc-lf-icon { font-size:1.1rem }
+.sc-lf-title { font-size:.85rem; font-weight:700; color:var(--s-text); text-transform:uppercase; letter-spacing:.06em }
+.sc-lf-strength { font-size:.85rem; color:#34d399; line-height:1.65; margin-bottom:20px; padding:12px 16px; background:rgba(52,211,153,.04); border-radius:10px; border-left:3px solid rgba(52,211,153,.3) }
+.sc-lf-focus { margin-bottom:20px }
+.sc-lf-focus-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--s-text-muted); margin-bottom:12px }
+.sc-lf-focus-item { display:flex; align-items:flex-start; gap:12px; font-size:.82rem; color:var(--s-text-muted); line-height:1.7; margin-bottom:12px; padding:10px 14px; background:rgba(255,255,255,.015); border-radius:8px }
+.sc-lf-focus-num { font-family:'DM Serif Display',serif; font-size:1rem; font-weight:700; flex-shrink:0; min-width:20px }
+.sc-lf-next { padding:14px 16px; background:rgba(255,255,255,.02); border-radius:10px; border:1px solid rgba(255,255,255,.05) }
+.sc-lf-next-label { font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; margin-bottom:6px }
+.sc-lf-next-body { font-size:.82rem; color:var(--s-text-muted); line-height:1.65 }
+
+/* Overall band bar */
+.sc-overall-band { text-align:center; max-width:400px; margin:0 auto 32px; padding:24px 28px; background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.06); border-radius:14px }
+.sc-overall-band-label { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:var(--s-text-muted); margin-bottom:8px }
+.sc-overall-band-value { font-family:'DM Serif Display',serif; font-size:1.6rem; font-weight:400; margin-bottom:12px }
+.sc-overall-band-bar { height:6px; background:rgba(255,255,255,.06); border-radius:3px; overflow:hidden; margin-bottom:6px }
+.sc-overall-band-fill { height:100%; border-radius:3px; transition:width .6s ease }
+.sc-overall-band-pct { font-size:.7rem; color:var(--s-text-muted) }
+
+/* Dimension band extras */
+.sc-results-dim { position:relative; padding-left:28px }
+.sc-results-dim-band-dot { position:absolute; left:20px; top:20px; width:8px; height:8px; border-radius:50% }
+.sc-results-dim-band-tag { display:inline-block; font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:3px 10px; border:1px solid; border-radius:20px; margin-bottom:6px }
+.sc-results-dim-feedback { font-size:.72rem; color:var(--s-text-muted); line-height:1.55; margin-top:6px; font-style:italic }
+
+/* Per-screen feedback */
+.sc-results-answer-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
+.sc-results-answer-band { font-size:.55rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; padding:2px 10px; border:1px solid; border-radius:20px }
+.sc-results-feedback-line { font-size:.78rem; color:var(--s-text); line-height:1.6; margin-top:10px; padding:10px 14px; background:rgba(255,255,255,.02); border-radius:8px; border-left:3px solid rgba(255,255,255,.08) }
+.sc-results-best-hint { font-size:.75rem; color:#fbbf24; line-height:1.55; margin-top:8px; padding:8px 14px; background:rgba(251,191,36,.04); border-radius:8px }
+.sc-results-best-hint-label { font-weight:700; font-size:.65rem; text-transform:uppercase; letter-spacing:.06em }
+.sc-results-hints { margin-top:12px; padding:12px 16px; background:rgba(255,255,255,.015); border:1px solid rgba(255,255,255,.04); border-radius:10px }
+.sc-results-hints-title { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--s-text-muted); margin-bottom:8px }
+.sc-results-hint-item { display:flex; align-items:flex-start; gap:8px; font-size:.75rem; color:var(--s-text-muted); line-height:1.55; margin-bottom:4px }
+.sc-results-hint-check { flex-shrink:0; font-size:.7rem }
 `;
 }

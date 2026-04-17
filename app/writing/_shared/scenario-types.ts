@@ -20,6 +20,7 @@ export type ScenarioScreen = {
   title: string;
   body: string;        // supports \n for line breaks
   note?: string;       // optional italicised note below body
+  pinAsReference?: boolean;  // if true, content stays visible as sidebar on all subsequent screens
 };
 
 export type ChoiceScreen = {
