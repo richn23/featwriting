@@ -25,6 +25,15 @@ const pageStyles = `
 .vl-point-body { font-size:.85rem; color:var(--s-text-muted); line-height:1.7 }
 .vl-point-body strong { color:var(--s-text); font-weight:600 }
 
+/* Beyond knowledge section */
+.vl-beyond { max-width:560px; margin:0 auto 48px; padding:0 24px }
+.vl-beyond-title { font-family:'DM Serif Display',serif; font-size:clamp(1.2rem,2vw,1.5rem); font-weight:400; color:var(--s-text); margin-bottom:16px; text-align:center }
+.vl-beyond-intro { font-size:.85rem; color:var(--s-text-muted); line-height:1.7; margin-bottom:20px; text-align:center }
+.vl-beyond-list { list-style:none; padding:0; margin:0 0 16px }
+.vl-beyond-list li { font-size:.82rem; color:var(--s-text-muted); line-height:1.7; padding:6px 0 6px 20px; position:relative }
+.vl-beyond-list li::before { content:''; position:absolute; left:0; top:14px; width:8px; height:8px; border-radius:50%; border:1.5px solid; opacity:.5 }
+.vl-beyond-close { font-size:.85rem; color:var(--s-text); font-weight:500; text-align:center; margin-top:16px }
+
 /* Task grid */
 .vl-tasks { max-width:720px; margin:0 auto 48px; padding:0 24px }
 .vl-tasks-title { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:var(--s-text-muted); margin-bottom:16px; text-align:center }
@@ -55,7 +64,7 @@ export default function ProfessionalPage() {
           <div className="vl-eyebrow" style={{ color: accent }}>Workplace Readiness Assessment</div>
           <h1 className="vl-title">Not what they <em style={{ color: accent }}>know.</em><br />What they <em style={{ color: accent }}>do.</em></h1>
           <p className="vl-sub">
-            Decision-making under pressure, applied training, AI literacy, information handling, and structured reasoning. Five interactive scenarios that test professional judgment — not knowledge recall. Each one scored against transparent performance criteria.
+            Most assessments measure knowledge in isolation. Workplaces don&apos;t. They require decisions under pressure, adapting to change, and justifying actions in real time. FEAT Workplace Readiness evaluates how candidates perform in these conditions — through interactive scenarios that simulate real professional demands. Decision-making under pressure, applied training, AI literacy, information handling, and structured reasoning — assessed through performance, not recall.
           </p>
         </div>
 
@@ -63,21 +72,35 @@ export default function ProfessionalPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Evolving scenarios.</strong> Conditions change mid-task. New information arrives. The candidate has to adapt — not just pick the right answer from a static list.
+              <strong>Dynamic scenarios.</strong> Conditions change. Information evolves. New inputs are introduced mid-task. Candidates must reassess, reprioritise, and adapt — not rely on fixed answers.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Justify everything.</strong> Every decision requires a justification. The system doesn&apos;t just check what you chose — it checks whether your reasoning holds up.
+              <strong>Justified decisions.</strong> Every decision must be explained. The system evaluates not just what was chosen, but whether the reasoning is sound, consistent, and defensible.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>03</div>
             <div className="vl-point-body">
-              <strong>Transparent criteria.</strong> Scoring dimensions are shown upfront. No hidden rubric. Candidates know exactly what competence looks like before they begin.
+              <strong>Transparent criteria.</strong> No hidden rubric. Performance criteria are visible from the start. Candidates know what competence looks like — and are assessed against it directly.
             </div>
           </div>
+        </div>
+
+        <div className="vl-beyond animate-fade-up" style={{ animationDelay: "100ms" }}>
+          <div className="vl-beyond-title">Beyond <em style={{ color: accent }}>knowledge checks</em></div>
+          <div className="vl-beyond-intro">
+            Knowing the right answer is not enough. Workplace performance depends on the ability to:
+          </div>
+          <ul className="vl-beyond-list">
+            <li style={{ borderColor: accent }}>Act with incomplete information</li>
+            <li style={{ borderColor: accent }}>Adjust when conditions change</li>
+            <li style={{ borderColor: accent }}>Balance risk, priorities, and constraints</li>
+            <li style={{ borderColor: accent }}>Communicate decisions clearly</li>
+          </ul>
+          <div className="vl-beyond-close">These are rarely tested directly. FEAT makes them <em style={{ color: accent }}>measurable.</em></div>
         </div>
 
         <div className="vl-tasks animate-fade-up" style={{ animationDelay: "120ms" }}>

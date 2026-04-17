@@ -74,6 +74,15 @@ const pageStyles = `
 .vl-usecase-name { font-size:.78rem; font-weight:600; color:var(--s-text); margin-bottom:4px }
 .vl-usecase-desc { font-size:.75rem; color:var(--s-text-muted); line-height:1.6 }
 
+/* Beyond essay section */
+.vl-beyond { max-width:560px; margin:0 auto 48px; padding:0 24px }
+.vl-beyond-title { font-family:'DM Serif Display',serif; font-size:clamp(1.2rem,2vw,1.5rem); font-weight:400; color:var(--s-text); margin-bottom:16px; text-align:center }
+.vl-beyond-intro { font-size:.85rem; color:var(--s-text-muted); line-height:1.7; margin-bottom:20px; text-align:center }
+.vl-beyond-list { list-style:none; padding:0; margin:0 0 16px }
+.vl-beyond-list li { font-size:.82rem; color:var(--s-text-muted); line-height:1.7; padding:6px 0 6px 20px; position:relative }
+.vl-beyond-list li::before { content:''; position:absolute; left:0; top:14px; width:8px; height:8px; border-radius:50%; border:1.5px solid; opacity:.5 }
+.vl-beyond-close { font-size:.85rem; color:var(--s-text); font-weight:500; text-align:center; margin-top:16px }
+
 /* Task cards */
 .vl-tasks { max-width:640px; margin:0 auto 48px; padding:0 24px }
 .vl-tasks-title { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:var(--s-text-muted); margin-bottom:16px; text-align:center }
@@ -103,10 +112,10 @@ export default function AcademicPage() {
         </nav>
 
         <div className="vl-hero animate-fade-up">
-          <div className="vl-eyebrow" style={{ color: accent }}>Formative Assessment &amp; Progress Testing</div>
-          <h1 className="vl-title">Can they <em style={{ color: accent }}>apply</em> it?<br />Not just <em style={{ color: accent }}>recall</em> it.</h1>
+          <div className="vl-eyebrow" style={{ color: accent }}>Rethinking Academic Assessment</div>
+          <h1 className="vl-title">Not just <em style={{ color: accent }}>recall</em> —<br />but use, adapt, and <em style={{ color: accent }}>justify.</em></h1>
           <p className="vl-sub">
-            Most progress tests measure memory. A learner can score well and still be unable to use what they know in context. FEAT Academic tests application — functions tied to course objectives, checked through structured dialogue. Competent or not yet competent, per objective.
+            Most academic assessments measure output. FEAT measures thinking in action. Essays and short answers capture knowledge and, at times, reasoning. But a learner can write well and still fail to apply what they know when the context changes. FEAT Academic shifts the focus from written performance to applied competence — asking not &ldquo;Can the learner produce an answer?&rdquo; but &ldquo;Can they think, apply, and respond in context — under pressure, with variation, and with follow-up?&rdquo;
           </p>
         </div>
 
@@ -114,25 +123,39 @@ export default function AcademicPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Functions from your syllabus.</strong> You define what competence looks like for each learning objective. The system builds checks around those functions — not generic test questions.
+              <strong>Assessment aligned to academic objectives.</strong> You define what competence looks like for each objective — analysing data, evaluating arguments, applying theory, explaining concepts. The system builds assessment around these functions, not generic tasks.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>AI probes application.</strong> The examiner asks follow-up questions, pushes for examples, and tests whether the learner can use knowledge — not just repeat it. Dialogue continues until a confidence threshold is reached.
+              <strong>Application tested through dialogue.</strong> The examiner probes, challenges, and redirects. Learners must respond to variation, clarify reasoning, and adapt explanations. Competence is not a single response — it is sustained performance.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>03</div>
             <div className="vl-point-body">
-              <strong>A profile, not a grade.</strong> The output is a functional profile: which objectives are confirmed, which are not yet evidenced, and where the gaps are. Per learner. Per objective. Across time.
+              <strong>A profile of academic capability.</strong> Output is not a score, but a structured profile: which objectives are evidenced, which are not yet secure, and where performance breaks down under pressure.
             </div>
           </div>
         </div>
 
+        <div className="vl-beyond animate-fade-up" style={{ animationDelay: "100ms" }}>
+          <div className="vl-beyond-title">Beyond the <em style={{ color: accent }}>essay</em></div>
+          <div className="vl-beyond-intro">
+            Essays test structured thinking under controlled conditions. But academic performance also requires:
+          </div>
+          <ul className="vl-beyond-list">
+            <li style={{ borderColor: accent }}>Explaining ideas to different audiences</li>
+            <li style={{ borderColor: accent }}>Responding to challenge and critique</li>
+            <li style={{ borderColor: accent }}>Applying knowledge to new problems</li>
+            <li style={{ borderColor: accent }}>Making decisions with incomplete information</li>
+          </ul>
+          <div className="vl-beyond-close">These are rarely assessed directly. FEAT Academic makes them <em style={{ color: accent }}>measurable.</em></div>
+        </div>
+
         <div className="vl-usecases animate-fade-up" style={{ animationDelay: "120ms" }}>
-          <div className="vl-usecases-title">Example use cases</div>
+          <div className="vl-usecases-title">What this enables</div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Mid-course progress checks</div>
             <div className="vl-usecase-desc">Can the learner apply what was taught in weeks 1–4? Not a written test — a structured conversation that probes understanding.</div>
@@ -172,7 +195,7 @@ export default function AcademicPage() {
 
         <footer className="vl-footer">
           <div className="vl-footer-logo">FEAT <em style={{ color: accent }}>Academic</em></div>
-          <div>Formative Assessment &amp; Progress Testing</div>
+          <div>Rethinking Academic Assessment</div>
         </footer>
       </div>
     </div>

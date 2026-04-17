@@ -4,23 +4,23 @@ import { writingStyles } from "./_shared/styles";
 
 /* ─── Five FEAT verticals ──────────────────────────────────── */
 
+/*
+  Layout order (clockwise from top-right):
+  [0] top-right  = ESL
+  [1] mid-right  = Academic
+  [2] bottom     = Beyond
+  [3] mid-left   = Professional
+  [4] top-left   = CEFR
+*/
+
 const SEGMENTS = [
   {
     id: "esl",
     label: "ESL",
     sub: "English Language Testing",
     href: "/writing/esl",
-    bg: "rgba(52,211,153,.045)",
+    bg: "rgba(52,211,153,.09)",
     accent: "#34d399",
-    ready: true,
-  },
-  {
-    id: "professional",
-    label: "Professional",
-    sub: "Workplace Readiness",
-    href: "/writing/professional",
-    bg: "rgba(251,191,36,.04)",
-    accent: "#fbbf24",
     ready: true,
   },
   {
@@ -28,17 +28,8 @@ const SEGMENTS = [
     label: "Academic",
     sub: "Formative Assessment",
     href: "/writing/academic",
-    bg: "rgba(167,139,250,.04)",
+    bg: "rgba(167,139,250,.08)",
     accent: "#a78bfa",
-    ready: true,
-  },
-  {
-    id: "cefr",
-    label: "CEFR",
-    sub: "Level-Aligned Assessment",
-    href: "/writing/cefr",
-    bg: "rgba(56,189,248,.04)",
-    accent: "#38bdf8",
     ready: true,
   },
   {
@@ -46,37 +37,58 @@ const SEGMENTS = [
     label: "Beyond",
     sub: "Define Your Own",
     href: "/writing/custom",
-    bg: "rgba(251,113,133,.035)",
+    bg: "rgba(251,113,133,.07)",
     accent: "#fb7185",
+    ready: true,
+  },
+  {
+    id: "professional",
+    label: "Professional",
+    sub: "Workplace Readiness",
+    href: "/writing/professional",
+    bg: "rgba(251,191,36,.07)",
+    accent: "#fbbf24",
+    ready: true,
+  },
+  {
+    id: "cefr",
+    label: "CEFR",
+    sub: "Level-Aligned Assessment",
+    href: "/writing/cefr",
+    bg: "rgba(56,189,248,.08)",
+    accent: "#38bdf8",
     ready: true,
   },
 ];
 
 /*
   Geometry: 5 equal wedges (72° each), rays from centre (50%,50%).
+  Using the viewport as a rectangle (aspect ~16:9), we compute where each
+  ray from centre hits the viewport edge.
+
   Ray angles (clockwise from top):
-    Ray 0: -90°  → hits (50%, 0%)
-    Ray 1: -18°  → hits (100%, 33.75%)
-    Ray 2:  54°  → hits (86.3%, 100%)
-    Ray 3: 126°  → hits (13.7%, 100%)
-    Ray 4: 198°  → hits (0%, 33.75%)
+    Ray 0: -90°  → (50%, 0%)         top centre
+    Ray 1: -18°  → (100%, 33.75%)    right upper
+    Ray 2:  54°  → (86.3%, 100%)     bottom right
+    Ray 3: 126°  → (13.7%, 100%)     bottom left
+    Ray 4: 198°  → (0%, 33.75%)      left upper
 */
 
 const CLIPS = [
-  "polygon(50% 50%, 50% 0%, 100% 0%, 100% 33.75%)",          // top-right
-  "polygon(50% 50%, 100% 33.75%, 100% 100%, 86.3% 100%)",    // right
-  "polygon(50% 50%, 86.3% 100%, 13.7% 100%)",                 // bottom
-  "polygon(50% 50%, 13.7% 100%, 0% 100%, 0% 33.75%)",        // left
-  "polygon(50% 50%, 0% 33.75%, 0% 0%, 50% 0%)",              // top-left
+  "polygon(50% 50%, 50% 0%, 100% 0%, 100% 33.75%)",          // top-right: ESL
+  "polygon(50% 50%, 100% 33.75%, 100% 100%, 86.3% 100%)",    // mid-right: Academic
+  "polygon(50% 50%, 86.3% 100%, 13.7% 100%)",                 // bottom: Beyond
+  "polygon(50% 50%, 13.7% 100%, 0% 100%, 0% 33.75%)",        // mid-left: Professional
+  "polygon(50% 50%, 0% 33.75%, 0% 0%, 50% 0%)",              // top-left: CEFR
 ];
 
-/* Label positions: centroid of each wedge, pushed ~32% from centre */
+/* Label positions: centroid of each wedge */
 const LABELS: [number, number][] = [
-  [68, 24],   // top-right
-  [80, 60],   // right
-  [50, 82],   // bottom
-  [20, 60],   // left
-  [32, 24],   // top-left
+  [72, 22],   // top-right: ESL
+  [80, 62],   // mid-right: Academic
+  [50, 82],   // bottom: Beyond
+  [20, 62],   // mid-left: Professional
+  [28, 22],   // top-left: CEFR
 ];
 
 /* Dividing line angles (from centre, CSS rotation) */
@@ -247,7 +259,7 @@ export default function WritingHomePage() {
           <div
             key={angle}
             className="hub-line"
-            style={{ transform: `rotate(${angle + 180}deg)` }}
+            style={{ transform: `rotate(${angle - 90}deg)` }}
           />
         ))}
 
