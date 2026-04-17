@@ -32,7 +32,7 @@ export type MacroResult = {
 
 export type LevelResult = { level: string; confirmed: boolean; canCount: number; threshold: string };
 export type Diagnosis = { diagnosedLevel: string; levelResults: LevelResult[]; results: MacroResult[] };
-export type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[]; levelMeaning?: string; focusNext?: string; outliers?: string[]; vocabRange?: string; vocabConsistency?: string };
+export type FormDimension = { dimension: string; level: string; descriptor: string; examples: string[]; levelMeaning?: string; strengthNote?: string; focusNext?: string; outliers?: string[]; vocabRange?: string; vocabConsistency?: string };
 export type FormAnalysis = { overallFormLevel: string; overallFormSummary: string; dimensions: FormDimension[] };
 export type WritingPrompt = { promptTitle: string; promptText: string; suggestedWords: [number, number]; topicSummary: string };
 export type ProbeTarget = { azeId: string; claim: string; level: string; fn: string; confidence: string };

@@ -181,6 +181,9 @@ export default function WritingReportPage() {
                       ))}
                     </div>
                   )}
+                  {dim.strengthNote && (
+                    <div className="form-dim-strength">What went well: {dim.strengthNote}</div>
+                  )}
                   {dim.focusNext && (
                     <div className="form-dim-focus">Next time, focus on: {dim.focusNext}</div>
                   )}

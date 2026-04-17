@@ -496,7 +496,8 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "examples": ["direct quote 1", "direct quote 2"],
       "outliers": ["direct quote that exceeds the assigned level — or empty array if none"],
       "levelMeaning": "One plain-English sentence explaining what this CEFR level means for this dimension — written for a non-expert reader.",
-      "focusNext": "One actionable sentence telling the candidate what to practise to move up one level. Be specific — name a grammar structure, vocabulary strategy, or discourse move."
+      "strengthNote": "One sentence naming the strongest thing the candidate did in this dimension — quote a specific moment from the text. E.g. 'You used a conditional clause naturally: \"If it had been cheaper, I would have chosen Option B.\"'",
+      "focusNext": "One actionable sentence telling the candidate what to practise to move up one level. CRITICAL: ground this in the candidate's ACTUAL text. Reference a specific moment where they fell short or missed an opportunity, then say what they should do differently. Do NOT produce generic CEFR restatements like 'practise subordinate clauses'. Instead: 'You wrote \"I think is good because cheap\" — try adding a subject and article: \"I think it is good because it is cheap.\"' If the candidate already demonstrated the next-level skill in outliers, acknowledge that and suggest they do it more consistently."
     },
     {
       "dimension": "Vocabulary Range",
@@ -507,7 +508,8 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "vocabRange": "B2",
       "vocabConsistency": "occasional",
       "levelMeaning": "One sentence.",
-      "focusNext": "One sentence."
+      "strengthNote": "One sentence naming a specific vocabulary highlight from the text.",
+      "focusNext": "One sentence grounded in a specific moment from the text — not generic."
     },
     {
       "dimension": "Discourse Management",
@@ -516,7 +518,8 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "examples": ["direct quote 1", "direct quote 2"],
       "outliers": [],
       "levelMeaning": "One sentence.",
-      "focusNext": "One sentence."
+      "strengthNote": "One sentence naming a specific discourse highlight from the text.",
+      "focusNext": "One sentence grounded in a specific moment from the text — not generic."
     },
     {
       "dimension": "Mechanics",
@@ -525,7 +528,8 @@ Respond ONLY with valid JSON — no preamble, no markdown:
       "examples": ["direct quote 1"],
       "outliers": [],
       "levelMeaning": "One sentence.",
-      "focusNext": "One sentence."
+      "strengthNote": "One sentence naming a specific mechanics highlight from the text.",
+      "focusNext": "One sentence grounded in a specific moment from the text — not generic."
     }
   ]
 }`;

@@ -269,6 +269,74 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 }
 .landing-task-desc { font-size:.78rem; line-height:1.6; color:var(--s-text-muted) }
 
+/* Beyond language testing */
+.landing-beyond {
+  padding:72px 48px;
+  border-top:1px solid rgba(255,255,255,.06);
+  text-align:center;
+  background:radial-gradient(ellipse at 50% 0%, rgba(251,191,36,.04) 0%, transparent 60%);
+}
+.landing-beyond-label {
+  font-size:.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.14em; color:#fbbf24; margin-bottom:12px;
+}
+.landing-beyond-title {
+  font-family:'DM Serif Display',serif;
+  font-size:clamp(1.6rem, 3.5vw, 2.2rem);
+  font-weight:400; letter-spacing:-.02em; line-height:1.15;
+  color:var(--s-text); margin-bottom:16px;
+}
+.landing-beyond-title em { color:#fbbf24; font-style:italic }
+.landing-beyond-intro {
+  font-size:.9rem; color:var(--s-text-muted); line-height:1.75;
+  max-width:640px; margin:0 auto 40px;
+}
+.landing-beyond-intro em { color:var(--s-text); font-style:normal; font-weight:600 }
+.landing-beyond-grid {
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+  gap:20px; max-width:1000px; margin:0 auto;
+}
+.landing-beyond-card {
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:14px; padding:28px 24px; text-align:left;
+  transition:border-color .2s, transform .2s;
+}
+.landing-beyond-card:hover {
+  border-color:rgba(251,191,36,.2); transform:translateY(-2px);
+}
+.landing-beyond-card-icon {
+  font-size:1.4rem; margin-bottom:12px; opacity:.7;
+}
+.landing-beyond-card-title {
+  font-family:'DM Serif Display',serif;
+  font-size:1.05rem; font-weight:400; color:var(--s-text);
+  margin-bottom:10px; letter-spacing:-.01em;
+}
+.landing-beyond-card-body {
+  font-size:.8rem; line-height:1.7; color:var(--s-text-muted);
+  margin-bottom:14px;
+}
+.landing-beyond-card-tag {
+  font-size:.65rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:.08em; color:#fbbf24; opacity:.7;
+}
+.landing-beyond-card-cta {
+  font-size:.72rem; font-weight:600; color:var(--s-text-muted);
+  margin-top:12px; opacity:0; transition:opacity .2s, color .2s;
+}
+.landing-beyond-card:hover .landing-beyond-card-cta {
+  opacity:1; color:#fbbf24;
+}
+.landing-beyond-footer {
+  margin-top:36px; font-size:.85rem; color:var(--s-text-muted);
+  line-height:1.7; max-width:700px; margin-left:auto; margin-right:auto;
+  padding-top:24px; border-top:1px solid rgba(255,255,255,.04);
+}
+.landing-beyond-footer em {
+  color:#fbbf24; font-style:normal; font-weight:600;
+}
+
 /* Final CTA */
 .landing-final-cta {
   border-top:1px solid rgba(255,255,255,.06);
@@ -761,6 +829,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--s-bg); color:var(--s-t
 .form-dim-evidence { font-size:.725rem; color:#64748b; margin-top:8px; line-height:1.5 }
 .form-dim-evidence-label { font-weight:600; color:#94a3b8 }
 .form-dim-evidence-quote { font-style:italic }
+.form-dim-strength { font-size:.775rem; color:#34d399; margin-top:10px; line-height:1.5; padding-top:8px; border-top:1px solid rgba(255,255,255,.04) }
 .form-dim-focus { font-size:.775rem; color:var(--s-accent); margin-top:10px; line-height:1.5; padding-top:8px; border-top:1px solid rgba(255,255,255,.04) }
 .form-dim-outliers { font-size:.725rem; color:#fbbf24; margin-top:8px; line-height:1.5 }
 .form-dim-outliers-label { font-weight:600 }

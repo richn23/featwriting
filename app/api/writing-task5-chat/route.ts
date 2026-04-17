@@ -113,9 +113,9 @@ function buildConversationPrompt(
     3:
       "Push for reasons grounded in the cards. Ask why that option — insist they point to concrete details (price, time, location, features, ratings, etc.). If their answer is too generic, ask which specific detail from Option A or B supports their view.",
     4:
-      "Introduce a complication so neither option is perfect: e.g. tighter budget, less time, a conflicting preference, or a new constraint. Ask them to choose anyway and explain the trade-off. Make the tension explicit.",
+      "Introduce a complication so neither option is perfect: e.g. tighter budget, less time, a conflicting preference, or a new constraint. Ask them to choose anyway and explain the trade-off. Make the tension explicit. If the candidate handles the trade-off well (weighing pros and cons of both options), PUSH HARDER: challenge their reasoning, point out a downside they ignored, or ask what they would sacrifice. Do NOT accept the first answer if it is vague — probe for specifics.",
     5:
-      "Change the situation clearly (e.g. \"Now imagine the person has a different need…\" or a new priority). Ask for a NEW recommendation and a short explanation of how and why their advice changed compared to before.",
+      "Change the situation clearly — introduce a SECOND person with DIFFERENT or CONFLICTING priorities (e.g. \"Now imagine someone else needs advice — they care most about X, which is the opposite of what the first person wanted.\"). Ask for a NEW recommendation and a short explanation of how and why their advice changed. If the candidate gives a strong answer, introduce one more twist: ask what if the person has BOTH priorities — how would they decide then? This tests whether the candidate can synthesise conflicting needs, not just switch between them.",
   };
 
   // Language adaptation
@@ -167,6 +167,8 @@ Stay focused on the two options provided. Do not introduce unrelated topics or h
 2. Be warm and conversational.
 3. Do not decide stage yourself — use the CURRENT STAGE above only.
 4. Match your language to the candidate's level (see YOUR LANGUAGE LEVEL above).
+5. NEVER give a closing or summary statement mid-conversation. Do NOT say things like "Great advice!" or "That was wonderful!" as a final message. Every turn MUST end with a question or prompt that keeps the conversation going. The system decides when to end — not you.
+6. Do NOT praise the candidate's advice excessively. Brief acknowledgement is fine ("OK", "I see", "Right"), then move to the next question. Excessive praise wastes turns and reveals nothing about ability.
 
 ═══ CEILING SIGNAL (ADVISORY ONLY) ═══
 

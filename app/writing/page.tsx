@@ -123,6 +123,64 @@ export default function WritingLandingPage() {
           </div>
         </div>
 
+        <div className="landing-beyond animate-fade-up" style={{ animationDelay: "325ms" }}>
+          <div className="landing-beyond-label">Beyond language testing</div>
+          <div className="landing-beyond-title">It&apos;s not just <em>CEFR</em></div>
+          <div className="landing-beyond-intro">
+            The same engine — live interaction, structured elicitation, evidence-based scoring — works wherever you need to assess what someone can actually <em>do</em>. Language is the first application. It won&apos;t be the last.
+          </div>
+          <div className="landing-beyond-grid">
+            <Link href="/writing/beyond/ojt" className="landing-beyond-card" style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="landing-beyond-card-icon">&#9878;</div>
+              <div className="landing-beyond-card-title">Operational Judgment</div>
+              <div className="landing-beyond-card-body">
+                A workplace scenario unfolds. Decisions have consequences. The system introduces pressure, complications, and escalation triggers — then scores decision quality, justification logic, and timing. Not &ldquo;write a nice email.&rdquo; Make a call and defend it.
+              </div>
+              <div className="landing-beyond-card-tag">Hiring &middot; Promotion &middot; Role readiness</div>
+              <div className="landing-beyond-card-cta">Try demo &rarr;</div>
+            </Link>
+            <Link href="/writing/beyond/cpd" className="landing-beyond-card" style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="landing-beyond-card-icon">&#9733;</div>
+              <div className="landing-beyond-card-title">Applied CPD Assessment</div>
+              <div className="landing-beyond-card-body">
+                A classroom scenario unfolds. Diagnose the problem, explain why it matters, design a strategy — then prioritise under real constraints. Not &ldquo;what did you learn?&rdquo; but &ldquo;show me how you&apos;d apply it.&rdquo; Turns CPD from knowledge consumption into performance evidence.
+              </div>
+              <div className="landing-beyond-card-tag">Teacher training &middot; L&amp;D &middot; Professional development</div>
+              <div className="landing-beyond-card-cta">Try demo &rarr;</div>
+            </Link>
+            <Link href="/writing/beyond/ai-policy" className="landing-beyond-card" style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="landing-beyond-card-icon">&#9881;</div>
+              <div className="landing-beyond-card-title">AI Use &amp; Policy</div>
+              <div className="landing-beyond-card-body">
+                AI generated it. Now what? Evaluate the output, spot the risks, apply organisational policy, and adapt it for professional use. Not &ldquo;do you use AI?&rdquo; but &ldquo;can you tell when AI output is appropriate, risky, or needs changing?&rdquo; Scores risk detection, policy alignment, and quality of adaptation.
+              </div>
+              <div className="landing-beyond-card-tag">AI literacy &middot; Critical judgment &middot; Any sector</div>
+              <div className="landing-beyond-card-cta">Try demo &rarr;</div>
+            </Link>
+            <Link href="/writing/beyond/info-priority" className="landing-beyond-card" style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="landing-beyond-card-icon">&#9670;</div>
+              <div className="landing-beyond-card-title">Information Prioritisation</div>
+              <div className="landing-beyond-card-body">
+                Five messages arrive at once. A room isn&apos;t booked. A trainer is late. Participants are asking if it&apos;s cancelled. Rank what matters, justify why, design an action — then the situation changes and you re-prioritise. Tests signal vs noise under real information overload. Hard to fake.
+              </div>
+              <div className="landing-beyond-card-tag">Operations &middot; Coordination &middot; Workplace readiness</div>
+              <div className="landing-beyond-card-cta">Try demo &rarr;</div>
+            </Link>
+            <Link href="/writing/beyond/argument" className="landing-beyond-card" style={{ textDecoration: "none", color: "inherit" }}>
+              <div className="landing-beyond-card-icon">&#9874;</div>
+              <div className="landing-beyond-card-title">Argument Evaluation</div>
+              <div className="landing-beyond-card-body">
+                Two short texts. Opposing claims. Identify the arguments, judge which is stronger, spot the weakness — then build your own position in under 100 words. Not an essay. Structured, modular reasoning. Isolates thinking skills from writing length.
+              </div>
+              <div className="landing-beyond-card-tag">Academic readiness &middot; Critical thinking &middot; Any level</div>
+              <div className="landing-beyond-card-cta">Try demo &rarr;</div>
+            </Link>
+          </div>
+          <div className="landing-beyond-footer">
+            Together, these form a <em>Workplace Readiness Assessment</em> — decision-making, pedagogical thinking, critical AI use, operational judgment, and structured reasoning. All built on the same engine.
+          </div>
+        </div>
+
         <div className="landing-tasks animate-fade-up" style={{ animationDelay: "350ms" }}>
           <div className="landing-tasks-label">Test structure</div>
           <div className="landing-tasks-title">Five tasks, one session</div>
