@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+# Avoid duplicate brochure at repo root; canonical asset is public/FEAT_Brochure.pdf
+/FEAT_Brochure.pdf
 # misc
 .DS_Store
 ._*
