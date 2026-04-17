@@ -41,15 +41,15 @@ export default function ESLPage() {
       <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
-          <Link href="/writing" className="vl-nav-logo">FEAT <em style={{ color: accent }}>ESL</em></Link>
-          <Link href="/writing/task/01" className="vl-nav-cta" style={{ background: accent, color: "#0d1117" }}>Try the demo {ARROW}</Link>
+          <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>ESL</em></Link>
+          <Link href="/task/01" className="vl-nav-cta" style={{ background: accent, color: "#0d1117" }}>Try the demo {ARROW}</Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">
           <div className="vl-eyebrow" style={{ color: accent }}>English Language Testing</div>
           <h1 className="vl-title">What can your learners <em style={{ color: accent }}>do</em> with English?</h1>
           <p className="vl-sub">
-            Most English tests measure accuracy — grammar, vocabulary, format. FEAT ESL measures function. Can your learner inform, explain, argue, advise? Five interactive tasks collect evidence of what they can actually do with the language, not just how correctly they write.
+            Most English tests measure accuracy: grammar, vocabulary, format. FEAT ESL measures function. Can your learner inform, explain, argue, advise? Five interactive tasks collect evidence of what they can actually do with the language, not just how correctly they write.
           </p>
         </div>
 
@@ -57,13 +57,13 @@ export default function ESLPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Live AI interaction.</strong> No static prompts. The AI examiner adapts in real time — probing, challenging, and following up based on what the learner writes. This produces richer evidence than a timed essay ever could.
+              <strong>Live AI interaction.</strong> No static prompts. The AI examiner adapts in real time, probing, challenging, and following up based on what the learner writes. This produces richer evidence than a timed essay ever could.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Function, not format.</strong> Tasks are built around communicative functions — interact, inform, argue, rephrase, mediate. The question is never "write an essay." It is "can you do this thing with language?"
+              <strong>Function, not format.</strong> Tasks are built around communicative functions: interact, inform, argue, rephrase, mediate. The question is never "write an essay." It is "can you do this thing with language?"
             </div>
           </div>
           <div className="vl-point">
@@ -75,11 +75,11 @@ export default function ESLPage() {
         </div>
 
         <div className="vl-cta animate-fade-up" style={{ animationDelay: "160ms" }}>
-          <Link href="/writing/task/01" className="vl-cta-btn" style={{ background: accent, color: "#0d1117" }}>
+          <Link href="/task/01" className="vl-cta-btn" style={{ background: accent, color: "#0d1117" }}>
             Try the demo {ARROW}
           </Link>
           <br />
-          <Link href="/writing" className="vl-back">← Back to FEAT</Link>
+          <Link href="/" className="vl-back">← Back to FEAT</Link>
         </div>
 
         <footer className="vl-footer">

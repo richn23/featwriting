@@ -227,7 +227,7 @@ export function ScenarioTask({ task }: Props) {
         </div>
 
         <div className="animate-fade-up" style={{ animationDelay: "300ms", textAlign: "center", marginTop: 28 }}>
-          <Link href="/writing/beyond" className="btn-continue-new">Back to FEAT Beyond</Link>
+          <Link href="/beyond" className="btn-continue-new">Back to FEAT Beyond</Link>
         </div>
       </main>
     );

@@ -177,7 +177,7 @@ export function ResultsDashboard({
             <p style={{ fontSize: ".8rem", color: "var(--s-text-muted)", lineHeight: 1.55, marginBottom: 10 }}>
               Language ability (grammar, vocabulary, coherence) is now analysed across all tasks together once you&apos;ve finished.
             </p>
-            <a href="/writing/report" className="btn-continue-new" style={{ textDecoration: "none", display: "inline-flex" }}>
+            <a href="/report" className="btn-continue-new" style={{ textDecoration: "none", display: "inline-flex" }}>
               See overall language report
             </a>
           </div>

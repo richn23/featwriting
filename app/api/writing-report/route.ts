@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
+import { buildLanguageAnalysisPrompt } from "../../language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

@@ -43,14 +43,14 @@ export default function CustomPage() {
       <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
-          <Link href="/writing" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Beyond</em></Link>
+          <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Beyond</em></Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">
           <div className="vl-eyebrow" style={{ color: accent }}>Define Your Own</div>
           <h1 className="vl-title">Your context.<br />Your <em style={{ color: accent }}>criteria.</em></h1>
           <p className="vl-sub">
-            FEAT is an engine, not a test. You define the function — what competence looks like in your context. You set the criteria. The system collects the evidence through structured interaction and scores it against your standards. Any domain. Any skill. Any context where performance matters more than accuracy.
+            FEAT is an engine, not a test. You define the function: what competence looks like in your context. You set the criteria. The system collects the evidence through structured interaction and scores it against your standards. Any domain. Any skill. Any context where performance matters more than accuracy.
           </p>
         </div>
 
@@ -58,13 +58,13 @@ export default function CustomPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Define the function.</strong> A learning objective. A job requirement. An academic skill. A compliance standard. Whatever performance looks like in your context — that becomes the assessment target.
+              <strong>Define the function.</strong> A learning objective. A job requirement. An academic skill. A compliance standard. Whatever performance looks like in your context, that becomes the assessment target.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Set the criteria.</strong> What does competent look like? What does not yet competent look like? Your subject matter experts set the threshold — the system applies it consistently.
+              <strong>Set the criteria.</strong> What does competent look like? What does not yet competent look like? Your subject matter experts set the threshold. The system applies it consistently.
             </div>
           </div>
           <div className="vl-point">
@@ -110,7 +110,7 @@ export default function CustomPage() {
         </div>
 
         <div className="vl-cta animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <Link href="/writing" className="vl-back">← Back to FEAT</Link>
+          <Link href="/" className="vl-back">← Back to FEAT</Link>
         </div>
 
         <footer className="vl-footer">

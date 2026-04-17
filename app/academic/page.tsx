@@ -14,15 +14,15 @@ const DEMO_TASKS = [
     name: "Data Literacy",
     desc: "A misleading chart is presented as fact. Can you spot the problems, separate correlation from causation, and explain what the data actually shows?",
     dims: "Problem Detection · Causal Reasoning · Data Reinterpretation · Communication",
-    href: "/writing/beyond/data-literacy",
+    href: "/beyond/data-literacy",
     isNew: true,
   },
   {
     id: "explain-simply",
     name: "Explain Simply",
-    desc: "Take a complex concept and explain it to someone with no background. Adapt when they're confused. The Feynman test — if you can't explain it simply, you don't understand it.",
+    desc: "Take a complex concept and explain it to someone with no background. Adapt when they're confused. If you can't explain it simply, you don't understand it.",
     dims: "Core Accuracy · Jargon Removal · Analogy Quality · Adaptation",
-    href: "/writing/beyond/explain-simply",
+    href: "/beyond/explain-simply",
     isNew: true,
   },
   {
@@ -30,7 +30,7 @@ const DEMO_TASKS = [
     name: "Applied CPD",
     desc: "Can the learner apply training to a real classroom problem? Diagnose, strategise, prioritise under constraints.",
     dims: "Problem Diagnosis · Strategy Practicality · Decision Quality",
-    href: "/writing/beyond/cpd",
+    href: "/beyond/cpd",
     isNew: false,
   },
   {
@@ -38,7 +38,7 @@ const DEMO_TASKS = [
     name: "Argument Evaluation",
     desc: "Break down two arguments, judge their quality, identify weaknesses, select evidence, construct a position.",
     dims: "Claim Identification · Evaluation Quality · Argument Construction",
-    href: "/writing/beyond/argument",
+    href: "/beyond/argument",
     isNew: false,
   },
   {
@@ -46,7 +46,7 @@ const DEMO_TASKS = [
     name: "AI Output Evaluation",
     desc: "Evaluate AI-generated content against quality standards and organisational policy. Adapt it for real use.",
     dims: "Risk Detection · Policy Alignment · Adaptation Quality",
-    href: "/writing/beyond/ai-policy",
+    href: "/beyond/ai-policy",
     isNew: false,
   },
 ];
@@ -108,14 +108,14 @@ export default function AcademicPage() {
       <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
-          <Link href="/writing" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Academic</em></Link>
+          <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Academic</em></Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">
           <div className="vl-eyebrow" style={{ color: accent }}>Rethinking Academic Assessment</div>
-          <h1 className="vl-title">Not just <em style={{ color: accent }}>recall</em> —<br />but use, adapt, and <em style={{ color: accent }}>justify.</em></h1>
+          <h1 className="vl-title">Not just <em style={{ color: accent }}>recall.</em><br />Use, adapt, and <em style={{ color: accent }}>justify.</em></h1>
           <p className="vl-sub">
-            Most academic assessments measure output. FEAT measures thinking in action. Essays and short answers capture knowledge and, at times, reasoning. But a learner can write well and still fail to apply what they know when the context changes. FEAT Academic shifts the focus from written performance to applied competence — asking not &ldquo;Can the learner produce an answer?&rdquo; but &ldquo;Can they think, apply, and respond in context — under pressure, with variation, and with follow-up?&rdquo;
+            Most academic assessments measure output. FEAT measures thinking in action. Essays and short answers capture knowledge and, at times, reasoning. But a learner can write well and still fail to apply what they know when the context changes. FEAT Academic shifts the focus from written performance to applied competence. The question is not &ldquo;Can the learner produce an answer?&rdquo; but &ldquo;Can they think, apply, and respond in context, under pressure, with variation, and with follow-up?&rdquo;
           </p>
         </div>
 
@@ -123,13 +123,13 @@ export default function AcademicPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Assessment aligned to academic objectives.</strong> You define what competence looks like for each objective — analysing data, evaluating arguments, applying theory, explaining concepts. The system builds assessment around these functions, not generic tasks.
+              <strong>Assessment aligned to academic objectives.</strong> You define what competence looks like for each objective: analysing data, evaluating arguments, applying theory, explaining concepts. The system builds assessment around these functions, not generic tasks.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Application tested through dialogue.</strong> The examiner probes, challenges, and redirects. Learners must respond to variation, clarify reasoning, and adapt explanations. Competence is not a single response — it is sustained performance.
+              <strong>Application tested through dialogue.</strong> The examiner probes, challenges, and redirects. Learners must respond to variation, clarify reasoning, and adapt explanations. Competence is not a single response. It is sustained performance.
             </div>
           </div>
           <div className="vl-point">
@@ -158,7 +158,7 @@ export default function AcademicPage() {
           <div className="vl-usecases-title">What this enables</div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Mid-course progress checks</div>
-            <div className="vl-usecase-desc">Can the learner apply what was taught in weeks 1–4? Not a written test — a structured conversation that probes understanding.</div>
+            <div className="vl-usecase-desc">Can the learner apply what was taught in weeks 1–4? Not a written test. A structured conversation that probes understanding.</div>
           </div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Pre-assessment readiness</div>
@@ -166,7 +166,7 @@ export default function AcademicPage() {
           </div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Training transfer verification</div>
-            <div className="vl-usecase-desc">After a workshop or CPD session, verify that participants can apply the content — not just summarise it.</div>
+            <div className="vl-usecase-desc">After a workshop or CPD session, verify that participants can apply the content, not just summarise it.</div>
           </div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Cross-subject application</div>
@@ -190,7 +190,7 @@ export default function AcademicPage() {
         </div>
 
         <div className="vl-cta animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <Link href="/writing" className="vl-back">← Back to FEAT</Link>
+          <Link href="/" className="vl-back">← Back to FEAT</Link>
         </div>
 
         <footer className="vl-footer">

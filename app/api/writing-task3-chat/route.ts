@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { WRITING_TASK3, TopicOption } from "../../writing/writing-task3-descriptors";
-import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../writing/diagnosis-utils";
-import { buildLanguageAnalysisPrompt } from "../../writing/language-rubric";
+import { WRITING_TASK3, TopicOption } from "../../writing-task3-descriptors";
+import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../diagnosis-utils";
+import { buildLanguageAnalysisPrompt } from "../../language-rubric";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

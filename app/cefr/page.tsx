@@ -3,7 +3,7 @@ import Link from "next/link";
 import { writingStyles } from "../_shared/styles";
 
 const TASK_CARDS = [
-  { id: "01", num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat",    desc: "Live text chat with an AI examiner. It adapts in real time — probing ability, testing how the candidate interacts and informs." },
+  { id: "01", num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat",    desc: "Live text chat with an AI examiner. It adapts in real time, probing ability and testing how the candidate interacts and informs." },
   { id: "02", num: "T2", cls: "t2", fn: "Inform & Narrate", name: "Extended Writing",   desc: "Scaffolded prompt followed by extended response. Tests clarity, sequencing, and the ability to develop detail." },
   { id: "03", num: "T3", cls: "t3", fn: "Express & Argue",  name: "Opinion Chat",       desc: "Interactive discussion where the AI challenges, disagrees, and pushes for justification. Can you hold your position?" },
   { id: "04", num: "T4", cls: "t4", fn: "Rephrase & Adjust", name: "Pragmatic Control", desc: "Rewrite a text for a different audience or purpose. Tests paraphrasing, register control, and linguistic flexibility." },
@@ -78,15 +78,15 @@ export default function CefrLandingPage() {
       <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
-          <Link href="/writing" className="vl-nav-logo">FEAT <em style={{ color: accent }}>CEFR</em></Link>
-          <Link href="/writing/task/01" style={{ fontSize: ".68rem", fontWeight: 600, color: accent, textDecoration: "none", padding: "6px 14px", border: `1px solid rgba(56,189,248,.2)`, borderRadius: 8, transition: "border-color .2s" }}>Begin Test Demo</Link>
+          <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>CEFR</em></Link>
+          <Link href="/task/01" style={{ fontSize: ".68rem", fontWeight: 600, color: accent, textDecoration: "none", padding: "6px 14px", border: `1px solid rgba(56,189,248,.2)`, borderRadius: 8, transition: "border-color .2s" }}>Begin Test Demo</Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">
           <div className="vl-eyebrow" style={{ color: accent }}>Progress &amp; Placement Assessment</div>
           <h1 className="vl-title">Not just your <em style={{ color: accent }}>level.</em><br />Your <em style={{ color: accent }}>trajectory.</em></h1>
           <p className="vl-sub">
-            CEFR levels give a broad picture of ability. But they don&apos;t show how learning is progressing, or which objectives are actually secure. FEAT measures both. It tracks what has been learned, what can be applied, and where gaps remain — over time, and at the point of entry. Progress testing, objective tracking, and accurate placement — based on demonstrated performance, not single scores.
+            CEFR levels give a broad picture of ability. But they don&apos;t show how learning is progressing, or which objectives are actually secure. FEAT measures both. It tracks what has been learned, what can be applied, and where gaps remain. Over time, and at the point of entry. Progress testing, objective tracking, and accurate placement, all based on demonstrated performance, not single scores.
           </p>
         </div>
 
@@ -94,19 +94,19 @@ export default function CefrLandingPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Progress testing.</strong> Has learning actually transferred? Assessment is aligned to recent learning objectives. The system checks whether learners can apply what was taught — not just recognise it.
+              <strong>Progress testing.</strong> Has learning actually transferred? Assessment is aligned to recent learning objectives. The system checks whether learners can apply what was taught, not just recognise it.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>02</div>
             <div className="vl-point-body">
-              <strong>Objective-level tracking.</strong> What is secure, and what is not yet stable? Performance is mapped to specific learning objectives. You see exactly where competence is confirmed — and where it breaks down.
+              <strong>Objective-level tracking.</strong> What is secure, and what is not yet stable? Performance is mapped to specific learning objectives. You see exactly where competence is confirmed and where it breaks down.
             </div>
           </div>
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>03</div>
             <div className="vl-point-body">
-              <strong>Placement testing.</strong> Where should the learner start? Initial assessment identifies the highest level where performance is consistent — not just occasional success. Placement reflects demonstrated ability, not test-taking strategy.
+              <strong>Placement testing.</strong> Where should the learner start? Initial assessment identifies the highest level where performance is consistent, not just occasional success. Placement reflects demonstrated ability, not test-taking strategy.
             </div>
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function CefrLandingPage() {
           <div className="vl-usecases-title">What this enables</div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Mid-course checks</div>
-            <div className="vl-usecase-desc">Are learners actually progressing — or just completing content?</div>
+            <div className="vl-usecase-desc">Are learners actually progressing, or just completing content?</div>
           </div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Accurate placement</div>
@@ -146,7 +146,7 @@ export default function CefrLandingPage() {
           </div>
           <div className="vl-usecase">
             <div className="vl-usecase-name" style={{ color: accent }}>Objective-level reporting</div>
-            <div className="vl-usecase-desc">Identify exactly what needs reinforcement — objective by objective.</div>
+            <div className="vl-usecase-desc">Identify exactly what needs reinforcement, objective by objective.</div>
           </div>
         </div>
 
@@ -166,7 +166,7 @@ export default function CefrLandingPage() {
         </div>
 
         <div className="vl-cta animate-fade-up" style={{ animationDelay: "200ms" }}>
-          <Link href="/writing" className="vl-back">← Back to FEAT</Link>
+          <Link href="/" className="vl-back">← Back to FEAT</Link>
         </div>
 
         <footer className="vl-footer">

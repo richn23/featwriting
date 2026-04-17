@@ -57,14 +57,14 @@ export default function ProfessionalPage() {
       <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
-          <Link href="/writing" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Professional</em></Link>
+          <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Professional</em></Link>
         </nav>
 
         <div className="vl-hero animate-fade-up">
           <div className="vl-eyebrow" style={{ color: accent }}>Workplace Readiness Assessment</div>
           <h1 className="vl-title">Not what they <em style={{ color: accent }}>know.</em><br />What they <em style={{ color: accent }}>do.</em></h1>
           <p className="vl-sub">
-            Most assessments measure knowledge in isolation. Workplaces don&apos;t. They require decisions under pressure, adapting to change, and justifying actions in real time. FEAT Workplace Readiness evaluates how candidates perform in these conditions — through interactive scenarios that simulate real professional demands. Decision-making under pressure, applied training, AI literacy, information handling, and structured reasoning — assessed through performance, not recall.
+            Most assessments measure knowledge in isolation. Workplaces don&apos;t. They require decisions under pressure, adapting to change, and justifying actions in real time. FEAT evaluates how candidates perform in these conditions through interactive scenarios that simulate real professional demands. Five scenarios covering decision-making, applied training, AI literacy, information handling, and structured reasoning. All assessed through performance, not recall.
           </p>
         </div>
 
@@ -72,7 +72,7 @@ export default function ProfessionalPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>01</div>
             <div className="vl-point-body">
-              <strong>Dynamic scenarios.</strong> Conditions change. Information evolves. New inputs are introduced mid-task. Candidates must reassess, reprioritise, and adapt — not rely on fixed answers.
+              <strong>Dynamic scenarios.</strong> Conditions change. Information evolves. New inputs are introduced mid-task. Candidates must reassess, reprioritise, and adapt. No fixed answers.
             </div>
           </div>
           <div className="vl-point">
@@ -84,7 +84,7 @@ export default function ProfessionalPage() {
           <div className="vl-point">
             <div className="vl-point-num" style={{ color: accent }}>03</div>
             <div className="vl-point-body">
-              <strong>Transparent criteria.</strong> No hidden rubric. Performance criteria are visible from the start. Candidates know what competence looks like — and are assessed against it directly.
+              <strong>Transparent criteria.</strong> No hidden rubric. Performance criteria are visible from the start. Candidates know what competence looks like and are assessed against it directly.
             </div>
           </div>
         </div>
@@ -116,7 +116,7 @@ export default function ProfessionalPage() {
         </div>
 
         <div className="vl-cta animate-fade-up" style={{ animationDelay: "160ms" }}>
-          <Link href="/writing" className="vl-back">← Back to FEAT</Link>
+          <Link href="/" className="vl-back">← Back to FEAT</Link>
         </div>
 
         <footer className="vl-footer">
