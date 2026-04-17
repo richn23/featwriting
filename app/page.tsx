@@ -204,7 +204,7 @@ const hubStyles = `
     left:auto; top:auto; width:100%; height:auto;
     border-radius:0; padding:40px 24px 32px;
     border-bottom:1px solid rgba(255,255,255,.06);
-    box-shadow:none; order:999;
+    box-shadow:none; order:-1;
     background:radial-gradient(circle at center, #141b24 0%, #0f1520 100%);
   }
   .hub-centre-title { font-size:2.2rem; }
@@ -298,7 +298,7 @@ export default function WritingHomePage() {
 
         {/* Mobile card list (hidden on desktop, shown on mobile) */}
         <div className="hub-mobile-list">
-          {SEGMENTS.map((seg) => (
+          {[SEGMENTS[4], SEGMENTS[0], SEGMENTS[1], SEGMENTS[3], SEGMENTS[2]].map((seg) => (
             <Link
               key={`m-${seg.id}`}
               href={seg.href}

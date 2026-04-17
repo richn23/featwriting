@@ -141,20 +141,16 @@ export default function AcademicPage() {
         <div className="vl-usecases animate-fade-up" style={{ animationDelay: "120ms" }}>
           <div className="vl-usecases-title">What this enables</div>
           <div className="vl-usecase">
-            <div className="vl-usecase-name" style={{ color: accent }}>Mid-course progress checks</div>
-            <div className="vl-usecase-desc">Can the learner apply what was taught in weeks 1–4? Not a written test. A structured conversation that probes understanding.</div>
+            <div className="vl-usecase-name" style={{ color: accent }}>Pre-sessional readiness</div>
+            <div className="vl-usecase-desc">Can this student think critically, argue a position, interpret data? Test the skills that determine academic success before the programme starts. Not language proficiency. Thinking proficiency.</div>
           </div>
           <div className="vl-usecase">
-            <div className="vl-usecase-name" style={{ color: accent }}>Pre-assessment readiness</div>
-            <div className="vl-usecase-desc">Before a high-stakes exam, check which objectives the learner has actually internalised. Identify gaps while there is still time.</div>
+            <div className="vl-usecase-name" style={{ color: accent }}>Beyond IELTS</div>
+            <div className="vl-usecase-desc">IELTS tests language. It does not test whether a student can evaluate an argument, challenge a claim, or explain a concept to a non-specialist. These are the skills that matter. Now they are measurable.</div>
           </div>
           <div className="vl-usecase">
-            <div className="vl-usecase-name" style={{ color: accent }}>Training transfer verification</div>
-            <div className="vl-usecase-desc">After a workshop or CPD session, verify that participants can apply the content, not just summarise it.</div>
-          </div>
-          <div className="vl-usecase">
-            <div className="vl-usecase-name" style={{ color: accent }}>Cross-subject application</div>
-            <div className="vl-usecase-desc">Works for any subject where the objective is application: science, maths, business, health. Define the function, set the criteria.</div>
+            <div className="vl-usecase-name" style={{ color: accent }}>21st century skills assessment</div>
+            <div className="vl-usecase-desc">Critical thinking, communication, problem-solving, data literacy. Every curriculum framework lists them. Almost none assess them directly. FEAT does.</div>
           </div>
         </div>
 
