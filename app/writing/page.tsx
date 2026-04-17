@@ -19,8 +19,9 @@ const SEGMENTS = [
     label: "ESL",
     sub: "English Language Testing",
     href: "/writing/esl",
-    bg: "rgba(52,211,153,.09)",
-    accent: "#34d399",
+    bg: "rgba(74,222,128,.12)",
+    accent: "#4ADE80",
+    glow: "rgba(74,222,128,.25)",
     ready: true,
   },
   {
@@ -28,8 +29,9 @@ const SEGMENTS = [
     label: "Academic",
     sub: "Formative Assessment",
     href: "/writing/academic",
-    bg: "rgba(167,139,250,.08)",
-    accent: "#a78bfa",
+    bg: "rgba(192,132,252,.10)",
+    accent: "#C084FC",
+    glow: "rgba(192,132,252,.25)",
     ready: true,
   },
   {
@@ -37,8 +39,9 @@ const SEGMENTS = [
     label: "Beyond",
     sub: "Define Your Own",
     href: "/writing/custom",
-    bg: "rgba(251,113,133,.07)",
-    accent: "#fb7185",
+    bg: "rgba(244,114,182,.10)",
+    accent: "#F472B6",
+    glow: "rgba(244,114,182,.25)",
     ready: true,
   },
   {
@@ -46,17 +49,19 @@ const SEGMENTS = [
     label: "Professional",
     sub: "Workplace Readiness",
     href: "/writing/professional",
-    bg: "rgba(251,191,36,.07)",
-    accent: "#fbbf24",
+    bg: "rgba(250,204,21,.10)",
+    accent: "#FACC15",
+    glow: "rgba(250,204,21,.25)",
     ready: true,
   },
   {
     id: "cefr",
     label: "CEFR",
-    sub: "Level-Aligned Assessment",
+    sub: "Progress & Placement",
     href: "/writing/cefr",
-    bg: "rgba(56,189,248,.08)",
-    accent: "#38bdf8",
+    bg: "rgba(34,211,238,.10)",
+    accent: "#22D3EE",
+    glow: "rgba(34,211,238,.25)",
     ready: true,
   },
 ];
@@ -82,20 +87,20 @@ const CLIPS = [
   "polygon(50% 50%, 0% 33.75%, 0% 0%, 50% 0%)",              // top-left: CEFR
 ];
 
-/* Label positions: centroid of each wedge */
+/* Label positions: centroid of each wedge — nudged for better visual centering */
 const LABELS: [number, number][] = [
-  [72, 22],   // top-right: ESL
-  [80, 62],   // mid-right: Academic
-  [50, 82],   // bottom: Beyond
-  [20, 62],   // mid-left: Professional
-  [28, 22],   // top-left: CEFR
+  [74, 24],   // top-right: ESL
+  [78, 64],   // mid-right: Academic
+  [50, 80],   // bottom: Beyond
+  [22, 64],   // mid-left: Professional
+  [26, 24],   // top-left: CEFR
 ];
 
-/* Dividing line angles (from centre, CSS rotation) */
+/* Dividing line angles (ray directions from centre) */
 const LINE_ANGLES = [-90, -18, 54, 126, 198];
 
 const ARROW = (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
 );
 
 /* ─── Styles ───────────────────────────────────────────────── */
@@ -103,26 +108,26 @@ const ARROW = (
 const hubStyles = `
 .hub {
   position:relative; width:100vw; height:100vh; overflow:hidden;
-  background:#0d1117;
+  background:#0a0e14;
 }
 
 /* Wedge segments */
 .hub-wedge {
   position:absolute; inset:0;
   display:flex; align-items:center; justify-content:center;
-  transition:background .4s ease, filter .4s ease;
+  transition:background .35s ease, filter .35s ease;
   cursor:pointer; text-decoration:none; color:inherit;
 }
 .hub-wedge:hover {
-  filter:brightness(1.4);
+  filter:brightness(1.8) saturate(1.3);
 }
 
-/* Dividing lines */
+/* Dividing lines — 1px white lines from centre to edge */
 .hub-line {
   position:absolute; left:50%; top:50%;
-  width:1px; height:60vmax;
+  width:1px; height:72vmax;
   transform-origin:top center;
-  background:rgba(255,255,255,.07);
+  background:rgba(255,255,255,.10);
   pointer-events:none; z-index:5;
 }
 
@@ -130,26 +135,29 @@ const hubStyles = `
 .hub-centre {
   position:absolute; left:50%; top:50%;
   transform:translate(-50%,-50%);
-  width:clamp(160px, 18vw, 240px); height:clamp(160px, 18vw, 240px);
+  width:clamp(170px, 18vw, 250px); height:clamp(170px, 18vw, 250px);
   border-radius:50%;
-  background:#141b24;
-  border:1px solid rgba(255,255,255,.08);
+  background:radial-gradient(circle at center, #141b24 0%, #0f1520 100%);
+  border:1.5px solid rgba(255,255,255,.12);
   display:flex; flex-direction:column;
   align-items:center; justify-content:center;
   z-index:10; text-align:center;
-  box-shadow:0 0 80px rgba(0,0,0,.5);
+  box-shadow:
+    0 0 60px rgba(0,0,0,.6),
+    0 0 120px rgba(0,0,0,.3),
+    inset 0 0 40px rgba(255,255,255,.02);
 }
 .hub-centre-title {
   font-family:'DM Serif Display',serif;
-  font-size:clamp(1.8rem, 3.5vw, 2.8rem);
+  font-size:clamp(2rem, 3.8vw, 3rem);
   font-weight:400; letter-spacing:-.03em;
-  color:#e2e8f0;
+  color:#f1f5f9;
 }
 .hub-centre-sub {
-  font-size:clamp(.42rem, .7vw, .6rem);
+  font-size:clamp(.48rem, .75vw, .65rem);
   font-weight:600; text-transform:uppercase;
-  letter-spacing:.14em; color:#64748b;
-  margin-top:6px; max-width:80%;
+  letter-spacing:.14em; color:#94a3b8;
+  margin-top:8px; max-width:80%;
   line-height:1.5;
 }
 
@@ -157,27 +165,31 @@ const hubStyles = `
 .hub-label {
   position:absolute; transform:translate(-50%,-50%);
   text-align:center; pointer-events:none; z-index:6;
+  transition:transform .3s ease;
 }
 .hub-label-name {
   font-family:'DM Serif Display',serif;
-  font-size:clamp(1.1rem, 2vw, 1.6rem);
+  font-size:clamp(1.2rem, 2.2vw, 1.8rem);
   font-weight:400; letter-spacing:-.02em;
-  line-height:1.2; margin-bottom:4px;
+  line-height:1.2; margin-bottom:6px;
 }
 .hub-label-name em { font-style:italic }
 .hub-label-sub {
-  font-size:clamp(.5rem, .7vw, .65rem);
-  font-weight:600; text-transform:uppercase;
-  letter-spacing:.1em; opacity:.7;
+  font-size:clamp(.52rem, .72vw, .68rem);
+  font-weight:700; text-transform:uppercase;
+  letter-spacing:.12em; opacity:1;
 }
 .hub-label-cta {
-  display:inline-flex; align-items:center; gap:4px;
-  font-size:.55rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:.08em; margin-top:8px; opacity:.5;
-  transition:opacity .3s;
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:.6rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.08em; margin-top:12px;
+  padding:5px 14px;
+  border-radius:20px;
+  border:1.5px solid currentColor;
+  opacity:.7;
+  transition:opacity .3s, background .3s;
 }
-.hub-wedge:hover ~ .hub-label .hub-label-cta,
-.hub-label-cta { transition:opacity .3s }
+.hub-wedge:hover ~ .hub-label .hub-label-cta { opacity:1 }
 
 .hub-label-soon {
   font-size:.5rem; font-weight:700; text-transform:uppercase;
@@ -188,13 +200,13 @@ const hubStyles = `
 .hub-brochure {
   position:absolute; top:18px; right:24px; z-index:20;
   display:inline-flex; align-items:center; gap:6px;
-  font-size:.68rem; font-weight:600; color:#64748b;
+  font-size:.68rem; font-weight:600; color:#94a3b8;
   text-decoration:none; padding:6px 14px;
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:8px; transition:border-color .2s, color .2s;
-  background:rgba(13,17,23,.6); backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px; transition:border-color .2s, color .2s, background .2s;
+  background:rgba(10,14,20,.7); backdrop-filter:blur(8px);
 }
-.hub-brochure:hover { border-color:rgba(255,255,255,.2); color:#94a3b8 }
+.hub-brochure:hover { border-color:rgba(255,255,255,.25); color:#cbd5e1; background:rgba(255,255,255,.05) }
 
 /* Mobile */
 @media (max-width:700px) {
@@ -205,7 +217,7 @@ const hubStyles = `
     border-bottom:1px solid rgba(255,255,255,.06);
     justify-content:flex-start;
   }
-  .hub-wedge:hover { filter:brightness(1.2) }
+  .hub-wedge:hover { filter:brightness(1.3) }
   .hub-line { display:none }
   .hub-centre {
     position:relative; transform:none;
@@ -277,7 +289,7 @@ export default function WritingHomePage() {
               {seg.sub}
             </div>
             {seg.ready ? (
-              <div className="hub-label-cta" style={{ color: seg.accent }}>
+              <div className="hub-label-cta" style={{ color: seg.accent, borderColor: seg.accent }}>
                 Explore {ARROW}
               </div>
             ) : (
