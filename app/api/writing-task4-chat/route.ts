@@ -3,6 +3,8 @@ import OpenAI from "openai";
 import { WRITING_TASK4 } from "../../writing-task4-descriptors";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../diagnosis-utils";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
+import { sanitizeText, sanitizeShortString, InvalidChatInputError, MAX_MESSAGES } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -243,18 +245,31 @@ export async function POST(req: NextRequest) {
 
     // ── Diagnose all responses ─────────────────────────────────────────
     if (action === "diagnose") {
-      const { responses, candidateLevel } = body;
+      const { responses: responsesRaw, candidateLevel: candidateLevelRaw } = body;
+      if (!Array.isArray(responsesRaw)) {
+        throw new InvalidChatInputError("responses must be an array");
+      }
+      if (responsesRaw.length > MAX_MESSAGES) {
+        throw new InvalidChatInputError(`responses exceeds max of ${MAX_MESSAGES}`);
+      }
+      const responses = responsesRaw.map((r: unknown) => {
+        const obj = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+        return {
+          instruction: sanitizeText(obj.instruction),
+          stimulus: sanitizeText(obj.stimulus),
+          response: sanitizeText(obj.response),
+        };
+      });
+      const candidateLevel = sanitizeShortString(candidateLevelRaw);
 
       // Send candidate responses only to form analysis
-      const candidateResponsesOnly = (responses || [])
-        .map((r: { response: string }, i: number) =>
-          `Response ${i + 1}: ${r.response}`
-        )
+      const candidateResponsesOnly = responses
+        .map((r, i) => `Response ${i + 1}: ${r.response}`)
         .join("\n\n");
 
       // Send full context to function diagnosis
-      const responseText = (responses || [])
-        .map((r: { instruction: string; stimulus: string; response: string }, i: number) =>
+      const responseText = responses
+        .map((r, i) =>
           `Challenge ${i + 1}:\nInstruction: ${r.instruction}\nOriginal: ${r.stimulus}\nCandidate wrote: ${r.response}`
         )
         .join("\n\n---\n\n");
@@ -324,8 +339,8 @@ export async function POST(req: NextRequest) {
         try {
           const judgeB = JSON.parse(judgeBCleaned);
           reconciledResults = reconcileVerdicts(judgeA.results || [], judgeB.results || []);
-        } catch {
-          console.error("Judge B parse failed, using Judge A only");
+        } catch (parseErr) {
+          logServerError("writing-task4-chat", parseErr, { stage: "parse-judge-b" });
         }
 
         const diagnosis = { ...judgeA, results: reconciledResults };
@@ -348,8 +363,8 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             formAnalysis = JSON.parse(formCleaned);
-          } catch {
-            console.error("Failed to parse form analysis:", formCleaned);
+          } catch (parseErr) {
+            logServerError("writing-task4-chat", parseErr, { stage: "parse-form-analysis" });
           }
         }
 
@@ -361,7 +376,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.error("Writing Task 4 API error:", error);
+    if (error instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("writing-task4-chat", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }

@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { writingStyles } from "../_shared/styles";
 
 const accent = "#fb7185";
 
@@ -40,7 +39,7 @@ const pageStyles = `
 export default function CustomPage() {
   return (
     <div className="stakeholder-theme">
-      <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
           <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Beyond</em></Link>

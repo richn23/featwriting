@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { FormAnalysis } from "../_shared/types";
 import { getAllTaskSamples, clearTaskSamples, type TaskSample } from "../_shared/sampleStore";
-import { writingStyles } from "../_shared/styles";
 import { levelToPercent, barColor } from "../_shared/helpers";
 
 type ReportPhase = "loading" | "empty" | "analysing" | "done" | "error";
@@ -56,8 +55,7 @@ export default function WritingReportPage() {
     setPhase("empty");
   };
 
-  const S = <style dangerouslySetInnerHTML={{ __html: writingStyles }} />;
-  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{S}{children}</div>;
+  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{children}</div>;
 
   if (phase === "loading" || phase === "analysing") {
     return wrap(

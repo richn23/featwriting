@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import type { TaskDefinition } from "../_tasks/types";
 import type { TaskConfig, Diagnosis, StimulusItem, Message } from "./types";
 import { resizeTextareaToContent } from "./helpers";
-import { writingStyles } from "./styles";
 import { ResultsDashboard } from "./ResultsDashboard";
 import { saveTaskSamples } from "./sampleStore";
 
@@ -76,8 +75,7 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
     }
   };
 
-  const S = <style dangerouslySetInnerHTML={{ __html: writingStyles }} />;
-  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{S}{children}</div>;
+  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{children}</div>;
 
   if (phase === "loading-config" || !config) {
     return wrap(<main className="diagnosing-container"><div className="diagnosing-inner animate-fade-up"><div className="spinner" style={{ margin: "0 auto" }} /></div></main>);
@@ -96,6 +94,11 @@ export function StimulusTask({ task, initialLevel = "B1" }: StimulusTaskProps) {
               <div key={i} className="sb-section">
                 <div className="sb-section-title">{section.title}</div>
                 <div className="sb-section-body">{section.body}</div>
+                {section.bullets && section.bullets.length > 0 && (
+                  <ul className="sb-section-bullets">
+                    {section.bullets.map((b, j) => <li key={j}>{b}</li>)}
+                  </ul>
+                )}
               </div>
             ))}
             <div className="sb-reassurance">{reassurance}</div>

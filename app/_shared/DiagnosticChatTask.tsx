@@ -2,7 +2,6 @@
 import { useEffect, useState, useRef } from "react";
 import type { TaskDefinition } from "../_tasks/types";
 import type { TaskConfig, Diagnosis, Message, ProbeTarget, ElicitationTarget } from "./types";
-import { writingStyles } from "./styles";
 import { PhoneChat } from "./PhoneChat";
 import { ResultsDashboard } from "./ResultsDashboard";
 import { saveTaskSamples } from "./sampleStore";
@@ -299,8 +298,7 @@ export function DiagnosticChatTask({ task }: DiagnosticChatTaskProps) {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const S = <style dangerouslySetInnerHTML={{ __html: writingStyles }} />;
-  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{S}{children}</div>;
+  const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{children}</div>;
 
   if (phase === "loading-config" || !config) {
     return wrap(
@@ -325,6 +323,11 @@ export function DiagnosticChatTask({ task }: DiagnosticChatTaskProps) {
               <div key={i} className="sb-section">
                 <div className="sb-section-title">{section.title}</div>
                 <div className="sb-section-body">{section.body}</div>
+                {section.bullets && section.bullets.length > 0 && (
+                  <ul className="sb-section-bullets">
+                    {section.bullets.map((b, j) => <li key={j}>{b}</li>)}
+                  </ul>
+                )}
               </div>
             ))}
             <div className="sb-reassurance">{reassurance}</div>

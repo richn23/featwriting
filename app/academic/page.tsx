@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { writingStyles } from "../_shared/styles";
 
 const ARROW = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
@@ -20,7 +19,7 @@ const DEMO_TASKS = [
   {
     id: "explain-simply",
     name: "Explain Simply",
-    desc: "Take a complex concept and explain it to someone with no background. Adapt when they're confused. If you can't explain it simply, you don't understand it.",
+    desc: "A concept you've never seen before. A person who needs to understand it. Can you bridge the gap — and adapt when they're confused?",
     dims: "Core Accuracy · Jargon Removal · Analogy Quality · Adaptation",
     href: "/beyond/explain-simply",
     isNew: true,
@@ -28,7 +27,7 @@ const DEMO_TASKS = [
   {
     id: "argument",
     name: "Argument Evaluation",
-    desc: "Break down two arguments, judge their quality, identify weaknesses, select evidence, construct a position.",
+    desc: "Two arguments. One decision. Break them down, find the weaknesses, and justify your position.",
     dims: "Claim Identification · Evaluation Quality · Argument Construction",
     href: "/beyond/argument",
     isNew: false,
@@ -57,6 +56,15 @@ const pageStyles = `
 .vl-usecase { padding:16px 20px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.05); border-radius:10px; margin-bottom:10px }
 .vl-usecase-name { font-size:.78rem; font-weight:600; color:var(--s-text); margin-bottom:4px }
 .vl-usecase-desc { font-size:.75rem; color:var(--s-text-muted); line-height:1.6 }
+
+/* Design ethos section */
+.vl-ethos { max-width:560px; margin:0 auto 48px; padding:0 24px }
+.vl-ethos-eyebrow { font-size:.55rem; font-weight:700; text-transform:uppercase; letter-spacing:.16em; margin-bottom:12px; text-align:center }
+.vl-ethos-title { font-family:'DM Serif Display',serif; font-size:clamp(1.2rem,2vw,1.5rem); font-weight:400; color:var(--s-text); margin-bottom:16px; text-align:center }
+.vl-ethos-title em { font-style:italic }
+.vl-ethos-body { font-size:.85rem; color:var(--s-text-muted); line-height:1.75; margin-bottom:16px }
+.vl-ethos-body strong { color:var(--s-text); font-weight:600 }
+.vl-ethos-callout { font-size:.8rem; color:var(--s-text); line-height:1.7; padding:14px 18px; background:rgba(167,139,250,.06); border-left:2px solid; border-radius:4px; margin-top:16px }
 
 /* Beyond essay section */
 .vl-beyond { max-width:560px; margin:0 auto 48px; padding:0 24px }
@@ -89,7 +97,7 @@ const pageStyles = `
 export default function AcademicPage() {
   return (
     <div className="stakeholder-theme">
-      <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
           <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>Academic</em></Link>
@@ -121,6 +129,17 @@ export default function AcademicPage() {
             <div className="vl-point-body">
               <strong>A profile of academic capability.</strong> Output is not a score, but a structured profile: which objectives are evidenced, which are not yet secure, and where performance breaks down under pressure.
             </div>
+          </div>
+        </div>
+
+        <div className="vl-ethos animate-fade-up" style={{ animationDelay: "90ms" }}>
+          <div className="vl-ethos-eyebrow" style={{ color: accent }}>Design Principle</div>
+          <div className="vl-ethos-title">Every task is <em style={{ color: accent }}>self-contained</em></div>
+          <div className="vl-ethos-body">
+            The student brings thinking skills. The task provides everything else. No task should reward prior knowledge of a topic, familiarity with a debate, or cultural background. Where possible, we use invented concepts, fictional scenarios, or neutral everyday situations. The playing field must be level for every student, regardless of what they studied before.
+          </div>
+          <div className="vl-ethos-callout" style={{ borderColor: accent }}>
+            This is the key differentiator from IELTS: IELTS tasks implicitly favour widely-read students. <strong style={{ color: accent }}>FEAT Academic does not.</strong>
           </div>
         </div>
 

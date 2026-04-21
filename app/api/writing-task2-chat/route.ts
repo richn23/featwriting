@@ -3,6 +3,8 @@ import OpenAI from "openai";
 import { WRITING_TASK2, Topic } from "../../writing-task2-descriptors";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts } from "../../diagnosis-utils";
+import { validateMessages, sanitizeText, sanitizeShortString, InvalidChatInputError } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -330,20 +332,29 @@ export async function POST(req: NextRequest) {
   try {
     const {
       action,
-      messages,
+      messages: messagesRaw,
       exchangeCount,
       topic: topicFromClient,
-      candidateName,
-      task1Level,
-      task1Context,
-      writingResponse,
-      writtenText,
+      candidateName: candidateNameRaw,
+      task1Level: task1LevelRaw,
+      task1Context: task1ContextRaw,
+      writingResponse: writingResponseRaw,
+      writtenText: writtenTextRaw,
       scaffoldMessages: scaffoldMessagesFromClient,
       writingPrompt: writingPromptFromClient,
     } = await req.json();
 
+    const messages = validateMessages(messagesRaw);
+    const candidateName = sanitizeShortString(candidateNameRaw);
+    const task1Level = sanitizeShortString(task1LevelRaw);
+    const task1Context = sanitizeText(task1ContextRaw);
+    const writingResponse = sanitizeText(writingResponseRaw);
+    const writtenText = sanitizeText(writtenTextRaw);
+
     const topic: Topic = topicFromClient ?? pickRandomTopic();
-    const scaffoldMessages: Message[] = scaffoldMessagesFromClient ?? messages ?? [];
+    const scaffoldMessages: Message[] = Array.isArray(scaffoldMessagesFromClient)
+      ? validateMessages(scaffoldMessagesFromClient)
+      : messages;
 
 
     // ── Scaffold chat turn ─────────────────────────────────────────────────
@@ -504,8 +515,8 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             formAnalysis = JSON.parse(formCleaned);
-          } catch {
-            console.error("Failed to parse form analysis:", formCleaned);
+          } catch (parseErr) {
+            logServerError("writing-task2-chat", parseErr, { stage: "parse-form-analysis" });
           }
         }
 
@@ -521,7 +532,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 
   } catch (error) {
-    console.error("Writing Task 2 API error:", error);
+    if (error instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("writing-task2-chat", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }

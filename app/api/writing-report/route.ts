@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
+import { sanitizeText, sanitizeShortString, InvalidChatInputError, MAX_MESSAGES } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -21,7 +23,24 @@ const pooledLanguagePrompt = buildLanguageAnalysisPrompt("pooled");
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const tasks: TaskSample[] = Array.isArray(body.tasks) ? body.tasks : [];
+    if (!Array.isArray(body.tasks)) {
+      throw new InvalidChatInputError("tasks must be an array");
+    }
+    if (body.tasks.length > 20) {
+      throw new InvalidChatInputError("tasks exceeds max of 20");
+    }
+    const tasks: TaskSample[] = body.tasks.map((t: unknown) => {
+      const obj = (t && typeof t === "object" ? t : {}) as Record<string, unknown>;
+      const samplesRaw = Array.isArray(obj.samples) ? obj.samples : [];
+      if (samplesRaw.length > MAX_MESSAGES) {
+        throw new InvalidChatInputError(`task samples exceed max of ${MAX_MESSAGES}`);
+      }
+      return {
+        taskId: sanitizeShortString(obj.taskId),
+        taskLabel: sanitizeShortString(obj.taskLabel),
+        samples: samplesRaw.map((s: unknown) => sanitizeText(s)),
+      };
+    });
 
     if (tasks.length === 0) {
       return NextResponse.json({
@@ -76,8 +95,8 @@ export async function POST(req: NextRequest) {
     let formAnalysis;
     try {
       formAnalysis = JSON.parse(cleaned);
-    } catch {
-      console.error("Pooled language analysis parse failed:", cleaned);
+    } catch (parseErr) {
+      logServerError("writing-report", parseErr, { stage: "parse-pooled-language" });
       return NextResponse.json(
         { error: "Failed to parse language analysis response." },
         { status: 500 },
@@ -89,7 +108,10 @@ export async function POST(req: NextRequest) {
       meta: { wordCount, taskCount: tasks.length },
     });
   } catch (err) {
-    console.error("writing-report error:", err);
+    if (err instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    logServerError("writing-report", err);
     return NextResponse.json({ error: "Server error generating report." }, { status: 500 });
   }
 }

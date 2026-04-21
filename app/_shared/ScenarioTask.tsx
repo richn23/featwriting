@@ -2,7 +2,6 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import type { ScenarioTaskDef, Screen } from "./scenario-types";
-import { writingStyles } from "./styles";
 import { scoreTask, bandLabel, type TaskReport, type Band } from "./scenario-scoring";
 
 // ─── Word counter ──────────────────────────────────────────────
@@ -97,7 +96,7 @@ export function ScenarioTask({ task }: Props) {
   };
 
   const accent = task.accentColor;
-  const S = <style dangerouslySetInnerHTML={{ __html: writingStyles + scenarioStyles(accent) }} />;
+  const S = <style dangerouslySetInnerHTML={{ __html: scenarioStyles(accent) }} />;
   const wrap = (children: React.ReactNode) => <div className="stakeholder-theme">{S}{children}</div>;
 
   // ─── RESULTS ──────────────────────────────────────────────────

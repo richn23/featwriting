@@ -3,6 +3,8 @@ import OpenAI from "openai";
 import { WRITING_TASK3, TopicOption } from "../../writing-task3-descriptors";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../diagnosis-utils";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
+import { validateMessages, sanitizeText, sanitizeShortString, InvalidChatInputError } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -282,21 +284,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       action,
-      messages,
+      messages: messagesRaw,
       exchangeCount,
       wrapUp,
       chosenTopicId: chosenTopicIdRaw,
       switchTopicId: switchTopicIdRaw,
-      task1Level,
-      task2Level,
+      task1Level: task1LevelRaw,
+      task2Level: task2LevelRaw,
       candidateName: candidateNameRaw,
       task1Context: task1ContextRaw,
       probeRound,
       probeTargets: probeTargetsFromClient,
       probeExchangeCount,
     } = body;
-    const candidateName = candidateNameRaw || "";
-    const task1Context = task1ContextRaw || "";
+    const messages = validateMessages(messagesRaw);
+    const candidateName = sanitizeShortString(candidateNameRaw);
+    const task1Context = sanitizeText(task1ContextRaw);
+    const task1Level = sanitizeShortString(task1LevelRaw);
+    const task2Level = sanitizeShortString(task2LevelRaw);
     const chosenTopicId = chosenTopicIdRaw ?? body.chosenTopic;
     const switchTopicId = switchTopicIdRaw ?? body.switchTopic;
 
@@ -501,8 +506,8 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             formAnalysis = JSON.parse(formCleaned);
-          } catch {
-            console.error("Failed to parse form analysis:", formCleaned);
+          } catch (parseErr) {
+            logServerError("writing-task3-chat", parseErr, { stage: "parse-form-analysis" });
           }
         }
 
@@ -558,7 +563,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.error("Writing Task 3 API error:", error);
+    if (error instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("writing-task3-chat", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }

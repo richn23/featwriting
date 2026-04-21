@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { writingStyles } from "../_shared/styles";
 
 const TASK_CARDS = [
   { id: "01", num: "T1", cls: "t1", fn: "Interact & Inform", name: "Diagnostic Chat",    desc: "Live text chat with an AI examiner. It adapts in real time, probing ability and testing how the candidate interacts and informs." },
@@ -75,7 +74,7 @@ const pageStyles = `
 export default function CefrLandingPage() {
   return (
     <div className="stakeholder-theme">
-      <style dangerouslySetInnerHTML={{ __html: writingStyles + pageStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: pageStyles }} />
       <div className="vl">
         <nav className="vl-nav">
           <Link href="/" className="vl-nav-logo">FEAT <em style={{ color: accent }}>CEFR</em></Link>

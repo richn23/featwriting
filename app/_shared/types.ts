@@ -16,10 +16,22 @@ export type AzeMacro = {
   microIds: string[]; probes?: string[]; signals?: string[]; notes?: string;
 };
 
+export type GseMicro = {
+  id: string;
+  gse: number;
+  fn: string;
+  text: string;
+};
+
+/** Scoring principles vary per task (different flags for different task kinds),
+ *  so we allow any boolean/number/string field. UI code never reads this — it
+ *  is consumed by the diagnosis prompt builders on the server. */
+export type TaskPrinciples = Readonly<Record<string, boolean | number | string>>;
+
 export type TaskConfig = {
   meta: { taskId: string; title: string; functions: string[]; maxExchanges?: number; scaffoldingExchanges?: number; description: string };
-  principles: Record<string, unknown>;
-  gseMicro: unknown[];
+  principles: TaskPrinciples;
+  gseMicro: GseMicro[];
   azeMacro: AzeMacro[];
   levelClusters: LevelCluster[];
 };

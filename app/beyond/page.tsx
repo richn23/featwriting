@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { writingStyles } from "../_shared/styles";
 import { SCENARIO_TASK_LIST } from "../_shared/scenario-tasks-data";
 
 const ARROW = (
@@ -18,7 +17,6 @@ const CARD_ICONS: Record<string, string> = {
 export default function BeyondLandingPage() {
   return (
     <div className="stakeholder-theme">
-      <style dangerouslySetInnerHTML={{ __html: writingStyles }} />
       <div className="landing-page">
         <nav className="landing-nav">
           <div className="landing-nav-logo"><Link href="/" style={{ color: "inherit", textDecoration: "none" }}>FEAT</Link> <em style={{ color: "#fbbf24" }}>Beyond</em></div>

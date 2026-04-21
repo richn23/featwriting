@@ -20,7 +20,11 @@ export const task01: TaskDefinition = {
       },
       {
         title: "How the AI will behave",
-        body: "The AI adapts to your level.\n<ul><li>If you're comfortable, it will ask more challenging questions.</li><li>If something is difficult, it will adjust and support you.</li></ul>\n\nThe aim is to create a natural interaction where you can show how you communicate in writing.",
+        body: "The AI adapts to your level.\n\nThe aim is to create a natural interaction where you can show how you communicate in writing.",
+        bullets: [
+          "If you're comfortable, it will ask more challenging questions.",
+          "If something is difficult, it will adjust and support you.",
+        ],
       },
       {
         title: "How your responses are evaluated",

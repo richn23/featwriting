@@ -381,6 +381,60 @@ const FOCUS_TIPS: Record<string, Record<string, Record<Band, string>>> = {
       "needs-work": "Imagine you're explaining this to a friend over coffee. That's the tone you want. Warm, direct, no showing off. The goal is their understanding, not your credibility.",
     },
   },
+  "prof-comm": {
+    "Tone Appropriateness": {
+      strong: "",
+      developing: "Match the tone to the audience and the stakes. A client delay message isn't an internal Slack — it should be warmer than a memo and more accountable than a chat message.",
+      "needs-work": "Before you write, picture the reader opening your message. If they'd find it too casual or too stiff, adjust. For clients, aim for calm, direct, and professional — avoid exclamation marks, slang, or over-apology.",
+    },
+    "Message Clarity": {
+      strong: "",
+      developing: "Lead with the headline. The reader should know what the message is about in the first sentence — not the third.",
+      "needs-work": "Put the main point up top: what happened, what it means for them, what happens next. Don't bury the important information under context or caveats.",
+    },
+    "Relevance of Detail": {
+      strong: "",
+      developing: "Every sentence should earn its place. If a detail doesn't help the reader understand the situation or decide what to do, cut it.",
+      "needs-work": "Try this test: read your draft and delete any sentence that doesn't answer 'what happened', 'why it matters', or 'what next'. What's left is usually the message you should send.",
+    },
+    "Register": {
+      strong: "",
+      developing: "Professional register isn't the same as formal register. It's about consistency — don't open with 'Dear Client' and close with 'cheers!' Pick a lane and stay in it.",
+      "needs-work": "Read your message aloud. If any phrase feels too casual (emoji, slang, contractions in a serious context) or too stiff (legalese, corporate jargon), rewrite it in plain professional English.",
+    },
+    "Adaptation": {
+      strong: "",
+      developing: "When the client reacts, your next message should feel like it heard them — not like it's reading from a script. Acknowledge what they said before moving on.",
+      "needs-work": "A good follow-up starts by naming what the reader just raised. Then answer it directly. Don't restate your original position — show you've absorbed their response and are responding to it.",
+    },
+  },
+  interpersonal: {
+    "Acknowledgement": {
+      strong: "",
+      developing: "Name the impact, not just the facts. 'That must have been frustrating' lands differently than 'I see the deadline was missed.'",
+      "needs-work": "Start your reply with their experience: 'I understand this made things difficult for you in front of your manager.' Only after that do you explain or propose next steps. Acknowledgement first, action second.",
+    },
+    "Tone Under Pressure": {
+      strong: "",
+      developing: "When someone pushes hard, match their seriousness but not their heat. Steady beats sharp — and it's what de-escalates.",
+      "needs-work": "If you feel defensive, pause before writing. Re-read your draft and cut any line that sounds like you're protecting yourself. A calm, even tone carries more authority than a sharp one.",
+    },
+    "De-escalation": {
+      strong: "",
+      developing: "De-escalation means taking heat out of the exchange — not ignoring the problem. Acknowledge, then move the conversation toward a solution.",
+      "needs-work": "Avoid three things that add heat: counter-accusations, over-explaining, and repeated apologies. Do one thing instead: name the issue, commit to a concrete change, propose a conversation.",
+    },
+    "Proposed Resolution": {
+      strong: "",
+      developing: "Vague reassurances ('we'll try harder') sound dismissive. A concrete next step — even a small one — shows you've actually thought about it.",
+      "needs-work": "End with a specific commitment: a process change, a check-in, a 15-minute call. 'What can change' is the question you're really answering — make sure your reply answers it.",
+    },
+    "Register": {
+      strong: "",
+      developing: "A peer complaint needs a peer register — professional but not formal, honest but not casual. Match the level they chose.",
+      "needs-work": "Avoid going too stiff ('Dear colleague, I acknowledge receipt of your feedback') or too casual ('my bad, we'll sort it'). Aim for how you'd speak to them face-to-face if you were being thoughtful about it.",
+    },
+  },
 };
 
 function buildLearnerFeedback(

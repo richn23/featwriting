@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { writingStyles } from "./_shared/styles";
 
 /* ─── Five FEAT verticals ──────────────────────────────────── */
 
@@ -246,7 +245,7 @@ const hubStyles = `
 export default function WritingHomePage() {
   return (
     <div className="stakeholder-theme">
-      <style dangerouslySetInnerHTML={{ __html: writingStyles + hubStyles }} />
+      <style dangerouslySetInnerHTML={{ __html: hubStyles }} />
       <div className="hub">
 
         {/* Brochure link */}
@@ -262,12 +261,14 @@ export default function WritingHomePage() {
               key={seg.id}
               href={seg.href}
               className="hub-wedge"
+              aria-label={`${seg.label}: ${seg.sub}`}
               style={{ clipPath: CLIPS[i], background: seg.bg }}
             />
           ) : (
             <div
               key={seg.id}
               className="hub-wedge"
+              aria-hidden="true"
               style={{ clipPath: CLIPS[i], background: seg.bg, cursor: "default" }}
             />
           )

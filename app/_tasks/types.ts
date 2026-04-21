@@ -5,7 +5,7 @@ export type TaskBriefing = {
   titlePrefix: string;
   titleEmphasis: string;
   subtitle: string;
-  sections: { title: string; body: string }[];
+  sections: { title: string; body: string; bullets?: string[] }[];
   reassurance: string;
   startButtonLabel: string;
   extraBriefingClass?: string;

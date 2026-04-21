@@ -4,6 +4,8 @@ import { WRITING_TASK1, Topic } from "../../writing-descriptors";
 import { getSupabase } from "../../lib/supabase";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES, identifyElicitationTargets, buildElicitationPrompt, MAX_ELICITATION_EXCHANGES, ElicitationTarget } from "../../diagnosis-utils";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
+import { validateMessages, InvalidChatInputError } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -643,7 +645,7 @@ function levelToScore(label: string): number {
 export async function POST(req: NextRequest) {
   try {
     const {
-      messages,
+      messages: messagesRaw,
       exchangeCount,
       wrapUp,
       action,
@@ -658,6 +660,8 @@ export async function POST(req: NextRequest) {
       elicitationTargets: elicitationTargetsFromClient,
       elicitationExchangeCount,
     } = await req.json();
+
+    const messages = validateMessages(messagesRaw);
 
     const topic: Topic = topicFromClient ?? pickRandomTopic();
     const currentStage: Stage = (stageFromClient ?? STAGES.IDENTITY) as Stage;
@@ -782,8 +786,8 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             formAnalysis = JSON.parse(formCleaned);
-          } catch {
-            console.error("Failed to parse form analysis:", formCleaned);
+          } catch (parseErr) {
+            logServerError("writing-chat", parseErr, { stage: "parse-form-analysis" });
           }
         }
 
@@ -801,7 +805,7 @@ export async function POST(req: NextRequest) {
               transcript,
             });
           } catch (saveErr) {
-            console.error("Failed to save result to Supabase:", saveErr);
+            logServerError("writing-chat", saveErr, { stage: "supabase-save" });
             // Don't block the response — diagnosis still returns even if save fails
           }
         }
@@ -985,7 +989,10 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error("Writing Chat API error:", error);
+    if (error instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("writing-chat", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }

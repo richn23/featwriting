@@ -3,6 +3,8 @@ import OpenAI from "openai";
 import { WRITING_TASK5, StimulusSet } from "../../writing-task5-descriptors";
 import { buildLanguageAnalysisPrompt } from "../../language-rubric";
 import { calculateDiagnosedLevel, buildJudgeBPrompt, reconcileVerdicts, identifyProbeTargets, buildProbePrompt, MAX_PROBE_EXCHANGES } from "../../diagnosis-utils";
+import { validateMessages, sanitizeText, sanitizeShortString, InvalidChatInputError } from "../../_shared/chatValidation";
+import { logServerError } from "../../_shared/logger";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -269,9 +271,12 @@ const languageAnalysisPrompt = buildLanguageAnalysisPrompt("chat");
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, messages, exchangeCount, wrapUp, stimulusSetId, prevLevel, candidateName: candidateNameRaw, task1Context: task1ContextRaw, probeRound, probeTargets: probeTargetsFromClient, probeExchangeCount } = body;
-    const candidateName = candidateNameRaw || "";
-    const task1Context = task1ContextRaw || "";
+    const { action, messages: messagesRaw, exchangeCount, wrapUp, stimulusSetId: stimulusSetIdRaw, prevLevel: prevLevelRaw, candidateName: candidateNameRaw, task1Context: task1ContextRaw, probeRound, probeTargets: probeTargetsFromClient, probeExchangeCount } = body;
+    const messages = validateMessages(messagesRaw);
+    const candidateName = sanitizeShortString(candidateNameRaw);
+    const task1Context = sanitizeText(task1ContextRaw);
+    const stimulusSetId = sanitizeShortString(stimulusSetIdRaw);
+    const prevLevel = sanitizeShortString(prevLevelRaw);
     const exCount = typeof exchangeCount === "number" ? exchangeCount : 0;
 
     // ── Select stimulus set ────────────────────────────────────────────
@@ -441,8 +446,8 @@ export async function POST(req: NextRequest) {
         try {
           const judgeB = JSON.parse(judgeBCleaned);
           reconciledResults = reconcileVerdicts(judgeA.results || [], judgeB.results || []);
-        } catch {
-          console.error("Judge B parse failed, using Judge A only");
+        } catch (parseErr) {
+          logServerError("writing-task5-chat", parseErr, { stage: "parse-judge-b" });
         }
 
         const diagnosis = { ...judgeA, results: reconciledResults };
@@ -517,7 +522,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.error("Writing Task 5 API error:", error);
+    if (error instanceof InvalidChatInputError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    logServerError("writing-task5-chat", error);
     return NextResponse.json({ error: "Failed to get response" }, { status: 500 });
   }
 }
