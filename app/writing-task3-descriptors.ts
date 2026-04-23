@@ -23,7 +23,6 @@ export type CefrLevel =
   | "B2" | "B2_PLUS" | "C1";
 
 export type FunctionType = "Expressing" | "Arguing";
-export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
 
 export interface GseMicro {
   id: string;

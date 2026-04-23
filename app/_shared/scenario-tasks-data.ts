@@ -525,6 +525,7 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
         "Dr. Yıldız's claim: attendance should be optional because adult learners should manage their own time and some learn better independently",
         "Captures the core position, not just the topic",
       ],
+      dimension: "Task Achievement",
     },
     {
       kind: "choice",
@@ -538,6 +539,7 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
       requireJustification: true,
       justificationPrompt: "Why? What makes one argument more convincing than the other? Your score depends on the quality of your reasoning, not which side you pick.",
       justificationMax: 80,
+      dimension: "Critical Thinking",
     },
     {
       kind: "multi-select",
@@ -554,6 +556,7 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
       requireJustification: true,
       justificationPrompt: "Explain the weakness you selected in your own words.",
       justificationMax: 60,
+      dimension: "Critical Thinking",
     },
     {
       kind: "evidence-select",
@@ -567,6 +570,7 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
       ],
       requireJustification: true,
       justificationPrompt: "Why is this the best evidence?",
+      dimension: "Content Quality",
     },
     {
       kind: "short-text",
@@ -586,15 +590,16 @@ const ARGUMENT_EVAL: ScenarioTaskDef = {
         "Logic flows: position → reason → evidence",
         "Acknowledges the other side (bonus)",
       ],
+      dimension: "Argumentation",
     },
   ],
   scoringDimensions: [
-    { name: "Claim Identification", description: "Accurately captured each text's main argument" },
-    { name: "Evaluation Quality", description: "Analytical, not just 'I agree' — compared reasoning quality" },
-    { name: "Weakness Detection", description: "Correctly identified logical flaws" },
-    { name: "Evidence Judgment", description: "Selected the strongest, most relevant evidence" },
-    { name: "Argument Construction", description: "Built a clear, logical, supported position" },
+    { name: "Task Achievement", description: "Engaged with the specific arguments as stated — captured each position precisely rather than summarising the topic." },
+    { name: "Content Quality", description: "The substance of your evaluation: how accurately you read the reasoning and judged evidence quality." },
+    { name: "Argumentation", description: "How clearly you built your own position — claim, reasoning, acknowledgement of the other side." },
+    { name: "Critical Thinking", description: "How precisely you identified weaknesses and compared the reasoning quality of competing arguments." },
   ],
+  productLine: "academic",
 };
 
 
@@ -648,6 +653,7 @@ const DATA_LITERACY: ScenarioTaskDef = {
       requireJustification: true,
       justificationPrompt: "Which problem is the most serious, and why?",
       justificationMax: 80,
+      dimension: "Critical Thinking",
     },
     {
       kind: "choice",
@@ -662,6 +668,7 @@ const DATA_LITERACY: ScenarioTaskDef = {
       requireJustification: true,
       justificationPrompt: "Explain your reasoning. What would you need to establish causation?",
       justificationMax: 80,
+      dimension: "Critical Thinking",
     },
     {
       kind: "short-text",
@@ -679,6 +686,7 @@ const DATA_LITERACY: ScenarioTaskDef = {
         "Separates what the data shows from what it doesn't prove",
         "Doesn't dismiss the data entirely — notes what is useful",
       ],
+      dimension: "Content Quality",
     },
     {
       kind: "update",
@@ -704,147 +712,429 @@ const DATA_LITERACY: ScenarioTaskDef = {
         "Professional tone appropriate for a board audience",
         "Constructive — frames limitations as opportunities to improve measurement",
       ],
+      dimension: "Argumentation",
     },
   ],
   scoringDimensions: [
-    { name: "Problem Detection", description: "Spotted the real issues — not surface-level observations" },
-    { name: "Causal Reasoning", description: "Distinguished correlation from causation correctly" },
-    { name: "Data Reinterpretation", description: "Rewrote honestly without distorting or dismissing" },
-    { name: "Communication Clarity", description: "Explained findings clearly for a non-technical audience" },
+    { name: "Task Achievement", description: "Engaged with the specific chart and its claims, not drifting into general commentary about statistics." },
+    { name: "Content Quality", description: "The depth and accuracy of what you identified about this particular dataset." },
+    { name: "Argumentation", description: "How clearly your rewrite and board summary were structured — claim, reasoning, qualification." },
+    { name: "Critical Thinking", description: "How rigorously you evaluated the evidence and distinguished correlation from causation." },
   ],
+  productLine: "academic",
 };
 
 
-// ─── TASK 7: Explain Simply ──────────────────────────────────
+// ─── Academic Task: Interpretation & Evaluation ───────────────
+// Self-contained: the candidate is given a fictional academic model,
+// re-expresses it in their own words, then evaluates its assumptions
+// and scope. Combines Content Quality (comprehension + re-expression)
+// with Critical Thinking (evaluation).
 
-const EXPLAIN_SIMPLY: ScenarioTaskDef = {
-  id: "explain-simply",
-  shortTitle: "Explain Simply",
+const INTERPRETATION_EVAL: ScenarioTaskDef = {
+  id: "interpretation-evaluation",
+  shortTitle: "Interpretation & Evaluation",
   accentColor: "#f472b6",
   screens: [
     {
       kind: "briefing",
-      badge: "Academic Assessment",
-      title: "Explain",
-      titleEmphasis: "Simply",
-      subtitle: "If you can't explain it simply, you don't understand it well enough.",
-      objective: "Take a complex concept and explain it clearly to someone with no background knowledge.",
+      badge: "FEAT Academic",
+      title: "Interpretation",
+      titleEmphasis: "& Evaluation",
+      subtitle: "Understand an idea precisely, then judge its limits.",
+      objective: "Re-express an unfamiliar academic idea accurately in your own words, then evaluate the assumptions, limitations, or scope of the idea.",
       criteria: [
-        "Identifies the core idea accurately",
-        "Removes unnecessary jargon",
-        "Uses effective analogies or examples",
-        "Adapts when the audience shows confusion",
-        "Maintains accuracy while simplifying",
+        "Captures the idea precisely — neither distorts nor oversimplifies",
+        "Identifies the assumptions the idea depends on",
+        "Recognises the scope and limits of the claim",
+        "Evaluates rather than merely summarises",
+        "Recommends how the idea should (or shouldn't) be used",
       ],
       stakeholder: [
-        { title: "Why this task exists", body: "Explaining a complex idea simply is the hardest test of understanding. If someone can only explain it using technical language, they may be reciting — not understanding." },
-        { title: "What it replaces", body: "Written exams that reward technical vocabulary. This rewards clarity, accuracy, and the ability to make an idea accessible." },
-        { title: "How it is scored", body: "Accuracy of the core explanation, absence of unnecessary jargon, quality of analogies, and ability to adapt when the audience is confused." },
+        { title: "Why this task exists", body: "Academic reading is not just comprehension — it's the ability to understand an idea precisely AND judge its limits. Many candidates can do one but not the other. This task measures both." },
+        { title: "What it replaces", body: "Reading-comprehension questions that reward summary. This asks for re-expression followed by evaluation — a combined test of understanding and reasoning." },
+        { title: "How it is scored", body: "Content Quality (comprehension + re-expression) combined with Critical Thinking (evaluation of assumptions, limits, and scope)." },
       ],
     },
     {
       kind: "scenario",
-      label: "The concept",
-      title: "You need to explain this concept",
-      body: "A Zorbit filter is a two-stage process used in water treatment. In the first stage, suspended particles are trapped by a mesh of compressed ceramic fibres. In the second stage, dissolved chemical residues are absorbed by a layer of activated Zorbit compound, a porous synthetic material. The result is water that meets Grade 2 clarity standards.\n\nYour task: Explain what a Zorbit filter does to someone with no science background. The AI will respond as that person — adapt if they don't understand.",
+      label: "The framework",
+      title: "Read this carefully",
+      body: "The Ziegler Coherence Framework\n\nProposed by the fictional academic Dr. Ziegler, the framework claims that strong academic writing shares three features:\n\n1. A single controlling idea, restated in different forms across the paper\n2. Evidence that \"points inward\" — every piece of evidence links back to the controlling idea\n3. A conclusion that narrows rather than widens — the paper ends more focused than it began\n\nZiegler argues that any paper failing one or more of these three tests is necessarily incoherent, and that coherent papers cannot fail any of them.\n\nThis framework is presented here in full. You are not expected to have encountered it before.",
       pinAsReference: true,
     },
     {
-      kind: "choice",
-      label: "Approach",
-      question: "Which explanation approach would work best for a listener with no science background?",
-      options: [
-        { id: "a", text: "Define it technically: 'A two-stage filtration process using a ceramic fibre matrix and an activated synthetic absorbent medium'", quality: "poor" },
-        { id: "b", text: "Use a simple analogy: compare each stage to something they already know, like a sieve and then a sponge", quality: "best" },
-        { id: "c", text: "Walk them through each stage step by step using plain language", quality: "acceptable" },
-        { id: "d", text: "Just say 'it cleans water' and move on", quality: "poor" },
-      ],
-      requireJustification: true,
-      justificationPrompt: "Why is this the best approach for this particular person?",
-      justificationMax: 60,
-    },
-    {
       kind: "short-text",
-      label: "Your explanation",
-      question: "Write your explanation of a Zorbit filter for a person with no science background. They're intelligent — they just have no technical background here.",
+      label: "Re-express",
+      question: "Explain the Ziegler Coherence Framework in your own words. Do not quote the passage — paraphrase.",
       constraints: [
         "Maximum 100 words",
-        "No jargon or technical terms (or explain them if you use them)",
-        "Must be accurate — don't oversimplify to the point of being wrong",
-        "Capture that there are two stages doing two different jobs",
+        "Capture all three features",
+        "Capture Ziegler's core claim (that failure on any test = incoherence)",
+        "Use your own phrasing",
       ],
       maxWords: 100,
       scoringHints: [
-        "Core concept is correct: two stages, one for solid particles and one for dissolved chemicals",
-        "No unexplained jargon (ceramic fibres, activated compound, porous, etc.)",
-        "Uses a concrete example, analogy, or comparison",
-        "Doesn't merge the two stages into one generic 'filter'",
-        "Accessible tone — sounds like talking to a person, not reading a spec sheet",
+        "All three features are named and explained accurately",
+        "The logical structure is preserved — three individually necessary features",
+        "Ziegler's strong claim is captured ('any paper failing one test is incoherent')",
+        "The re-expression is in fresh language, not stitched-together quotations",
+        "Nothing is added that Ziegler did not say",
       ],
+      dimension: "Content Quality",
     },
     {
       kind: "multi-select",
-      label: "Spot the problems",
-      question: "A trainee wrote these explanations. Which ones have problems?",
+      label: "Assumptions",
+      question: "Which assumptions does the Ziegler framework make? Select all that apply.",
       options: [
-        { id: "a", text: "\"A Zorbit filter cleans water in two stages — first it catches solid bits with a fine mesh, then a special material soaks up dissolved chemicals that are too small to see.\"", correct: false },
-        { id: "b", text: "\"It's a dual-phase purification system utilising a ceramic fibre matrix for particulate sequestration and an activated absorbent medium for dissolved contaminants.\"", correct: true },
-        { id: "c", text: "\"Imagine a coffee filter that catches the grounds, then a sponge underneath that soaks up anything tiny that slipped through. A Zorbit filter does both jobs in one unit.\"", correct: false },
-        { id: "d", text: "\"It's basically a really good filter that gets all the dirt out of water.\"", correct: true },
+        { id: "a", text: "That all strong academic writing shares a single type of structure", correct: true },
+        { id: "b", text: "That a \"controlling idea\" can always be identified in coherent writing", correct: true },
+        { id: "c", text: "That evidence has a direction and can \"point\" somewhere", correct: true },
+        { id: "d", text: "That coherence is a binary property — a paper is coherent or it isn't", correct: true },
+        { id: "e", text: "That academic papers are always longer than 5,000 words", correct: false },
       ],
-      minSelect: 1,
-      maxSelect: 3,
+      minSelect: 2,
+      maxSelect: 5,
       requireJustification: true,
-      justificationPrompt: "What's wrong with the ones you selected?",
+      justificationPrompt: "Which assumption is the most important to question, and why?",
       justificationMax: 80,
-    },
-    {
-      kind: "update",
-      label: "Confusion",
-      title: "They're confused.",
-      body: "Your listener responds:\n\n\"OK so… it's basically a mesh that catches stuff? Like a sieve?\"\n\nThey've understood stage one but missed stage two entirely — they don't realise the filter also absorbs dissolved chemicals that a mesh couldn't catch.",
+      dimension: "Critical Thinking",
     },
     {
       kind: "short-text",
-      label: "Clarify",
-      question: "They've missed half of it. Write a follow-up that clarifies the key insight — that there are two different stages doing two different jobs — without making them feel stupid.",
+      label: "Limits",
+      question: "Identify two limitations of the Ziegler framework. What kinds of writing, or what situations, does it struggle to describe?",
       constraints: [
-        "Maximum 80 words",
-        "Address their specific misunderstanding",
-        "Use a concrete comparison if it helps",
-        "Encouraging tone",
+        "Maximum 90 words",
+        "Two distinct limitations",
+        "Each limitation should come with a brief reason",
       ],
-      maxWords: 80,
+      maxWords: 90,
       scoringHints: [
-        "Identifies their gap: they only see stage one (the mesh), not stage two (the absorbing layer)",
-        "Explains the difference between catching solid bits and soaking up dissolved chemicals",
-        "Uses a concrete comparison (e.g., a sieve AND a sponge, or coffee filter AND charcoal)",
-        "Doesn't patronise — builds on what they already understood",
-        "Tone is encouraging, not corrective",
+        "Identifies genuine limits — e.g. exploratory essays, multi-threaded arguments, papers that deliberately widen scope",
+        "Does not just list disagreements — gives reasons why the framework breaks",
+        "Considers edge cases Ziegler's strong claim struggles with (e.g. dialectical papers that hold competing ideas)",
+        "Stays within the framework's actual claim — evaluates what it says, not a straw version",
       ],
+      dimension: "Critical Thinking",
     },
     {
       kind: "choice",
-      label: "Analogy check",
-      question: "Which analogy best captures the KEY insight of a Zorbit filter (two stages doing two different jobs — catching solid bits and absorbing dissolved chemicals)?",
+      label: "Scope",
+      question: "Which statement best captures the appropriate scope of the Ziegler framework?",
       options: [
-        { id: "a", text: "A water jug filter with a paper screen on top and a charcoal layer below — the screen catches the bits, the charcoal soaks up what's dissolved", quality: "best" },
-        { id: "b", text: "A sieve catching lumps out of flour", quality: "poor" },
-        { id: "c", text: "A magnet pulling iron filings out of sand", quality: "poor" },
-        { id: "d", text: "A coffee machine — the paper filter catches grounds, and the water that comes through is clean", quality: "acceptable" },
+        { id: "a", text: "It is a useful general rule with known exceptions, not a definitive test of coherence", quality: "best" },
+        { id: "b", text: "It is correct — papers failing any of the three tests are indeed incoherent", quality: "poor" },
+        { id: "c", text: "It is too narrow to be useful and should be rejected", quality: "poor" },
+        { id: "d", text: "It describes one of several valid models of coherence; its strong claim overstates what it can test", quality: "best" },
       ],
       requireJustification: true,
-      justificationPrompt: "Why does this analogy work better than the others?",
-      justificationMax: 60,
+      justificationPrompt: "Justify your answer in terms of what the framework actually claims.",
+      justificationMax: 70,
+      dimension: "Task Achievement",
+    },
+    {
+      kind: "short-text",
+      label: "Recommendation",
+      question: "Write a short recommendation for a student using this framework. Should they apply it, and if so, how should they use it?",
+      constraints: [
+        "Maximum 90 words",
+        "Take a clear position (apply / apply with caveats / don't apply)",
+        "Give at least one reason",
+        "Acknowledge the framework's value even if you caveat it",
+      ],
+      maxWords: 90,
+      scoringHints: [
+        "Position is clear and defended, not fence-sitting",
+        "Reasoning draws on the framework's actual content — not generic writing advice",
+        "Balances strengths and limitations — not a one-sided dismissal or endorsement",
+        "Practical — tells the student something they could actually do",
+        "Academic register appropriate to the audience",
+      ],
+      dimension: "Argumentation",
     },
   ],
   scoringDimensions: [
-    { name: "Core Accuracy", description: "The explanation was correct — not oversimplified to the point of being wrong" },
-    { name: "Jargon Removal", description: "Technical terms removed or explained — accessible language throughout" },
-    { name: "Analogy Quality", description: "Used effective comparisons that illuminate rather than obscure" },
-    { name: "Adaptation", description: "Responded to confusion by clarifying the specific gap — not just repeating" },
-    { name: "Tone & Accessibility", description: "Warm, encouraging, and respectful — not patronising or academic" },
+    { name: "Task Achievement", description: "Engaged with Ziegler's actual claim — both explaining it AND evaluating it, as the task required." },
+    { name: "Content Quality", description: "How accurately you re-expressed the framework and how substantively you evaluated its assumptions and limits." },
+    { name: "Argumentation", description: "How clearly you structured your recommendation — position, reasoning, acknowledgement of scope." },
+    { name: "Critical Thinking", description: "How perceptively you identified the framework's assumptions, limits, and the scope it over-claims." },
   ],
+  productLine: "academic",
+};
+
+
+// ─── Academic Task: Weighing Alternatives ─────────────────────
+// Two academics take opposing positions on an internal policy question.
+// The candidate compares their reasoning, weighs the trade-offs, and
+// reaches a judgement about which position is stronger. Self-contained —
+// all arguments provided in-task.
+
+const WEIGHING_ALTERNATIVES: ScenarioTaskDef = {
+  id: "weighing-alternatives",
+  shortTitle: "Weighing Alternatives",
+  accentColor: "#22d3ee",
+  screens: [
+    {
+      kind: "briefing",
+      badge: "FEAT Academic",
+      title: "Weighing",
+      titleEmphasis: "Alternatives",
+      subtitle: "Compare perspectives. Weigh the reasoning. Reach a judgement you can defend.",
+      objective: "Analyse two positions on an open question, identify where their reasoning is stronger or weaker, and reach a justified judgement about which you find more persuasive.",
+      criteria: [
+        "Accurately captures each position",
+        "Identifies where the positions genuinely disagree (not just surface disagreement)",
+        "Weighs the quality of reasoning, not just the stance",
+        "Reaches a reasoned judgement — not fence-sitting",
+        "Acknowledges the strength in the position not chosen",
+      ],
+      stakeholder: [
+        { title: "Why this task exists", body: "University study is full of debates between competing accounts. The readiness question is whether a candidate can read two positions honestly, weigh their reasoning, and commit to a defensible view." },
+        { title: "What it replaces", body: "Compare-and-contrast essays that reward balanced-sounding summary. This pushes further — candidates must judge which reasoning is stronger and defend that judgement." },
+        { title: "How it is scored", body: "Quality of comparison, quality of the weighted judgement, and the extent to which reasoning — not stance — is evaluated." },
+      ],
+    },
+    {
+      kind: "scenario",
+      label: "Two positions",
+      title: "Read both positions carefully",
+      body: "A faculty committee is deciding whether to allow first-year students to use AI writing assistants for their weekly essays. Two committee members have written short memos.\n\nProf. Aramayo (against):\n\"Writing is thinking. If students offload the process to an AI assistant, they are not practising the cognitive work the essays are designed to develop. The weekly essay is not primarily a test of the final product; it is a structured space for a student to struggle with ideas until they settle into something they actually understand. AI assistants short-circuit that struggle. The result is a student who looks like they can write but hasn't built the thinking muscles a university education is meant to develop.\"\n\nProf. Beaumont (for):\n\"Every generation of students has had tools the previous generation thought were cheating — word processors, spell-checkers, the internet. In each case the panic passed because the tool became part of how thinking gets done, not a replacement for it. AI assistants are the same. What matters is whether we assess the right thing: if we test rote composition, AI makes our assessment obsolete; if we test reasoning, AI becomes a collaborator the student still has to steer. The right response is not to ban the tool but to redesign what we assess.\"",
+      pinAsReference: true,
+    },
+    {
+      kind: "short-text",
+      label: "Disagreement",
+      question: "In one or two sentences, state the core disagreement between Aramayo and Beaumont. Be precise — what do they actually disagree about?",
+      constraints: [
+        "Maximum 50 words",
+        "Identify the deepest point of disagreement",
+        "Avoid restating each position separately — name the disagreement itself",
+      ],
+      maxWords: 50,
+      scoringHints: [
+        "Frames the disagreement as being about what writing-for-learning is for, or about whether the cognitive process or the output is the object of assessment",
+        "Avoids framing it as 'pro vs anti AI' — that's the surface",
+        "Uses precise language drawn from the positions themselves",
+      ],
+      dimension: "Task Achievement",
+    },
+    {
+      kind: "multi-select",
+      label: "Reasoning moves",
+      question: "Which reasoning moves do the two memos make? Select all that apply.",
+      options: [
+        { id: "a", text: "Aramayo argues from the purpose of the assessment — that the essay is a learning process, not a product", correct: true },
+        { id: "b", text: "Beaumont argues from historical precedent — that other tools have been similarly panicked over and absorbed", correct: true },
+        { id: "c", text: "Beaumont argues that the solution lies in redesigning the assessment, not banning the tool", correct: true },
+        { id: "d", text: "Aramayo argues that AI writing is factually inaccurate and therefore unreliable", correct: false },
+        { id: "e", text: "Both memos appeal to what universities should be for, but disagree about what that implies", correct: true },
+      ],
+      minSelect: 2,
+      maxSelect: 5,
+      requireJustification: true,
+      justificationPrompt: "Which reasoning move in either memo do you find most persuasive, and why?",
+      justificationMax: 80,
+      dimension: "Critical Thinking",
+    },
+    {
+      kind: "short-text",
+      label: "Trade-offs",
+      question: "Identify one real trade-off that both positions must accept — something that isn't free even on their own terms.",
+      constraints: [
+        "Maximum 70 words",
+        "The trade-off must apply to the position you describe, on its own terms",
+        "Avoid generic 'pros and cons' — name something specific",
+      ],
+      maxWords: 70,
+      scoringHints: [
+        "Names a real cost for the chosen position — e.g. Aramayo's ban denies students a tool that will exist professionally; Beaumont's redesign requires substantial faculty effort and risks unreliable transitional assessment",
+        "Does not simply re-state the opposing position — finds a cost internal to the chosen one",
+        "Shows the candidate engaged with the reasoning, not just the stance",
+      ],
+      dimension: "Critical Thinking",
+    },
+    {
+      kind: "short-text",
+      label: "Weighted judgement",
+      question: "Which memo do you find more persuasive, and why? Weigh the two positions and defend your choice. The score depends on the quality of your weighing — not which memo you pick.",
+      constraints: [
+        "Maximum 120 words",
+        "State your judgement clearly",
+        "Give at least one specific reason drawn from the memos",
+        "Acknowledge a strength in the position you did not choose",
+      ],
+      maxWords: 120,
+      scoringHints: [
+        "Takes a clear position without hedging",
+        "Defends the choice with reasoning tied to the specific arguments, not generic intuitions",
+        "Acknowledges a real strength in the rejected position",
+        "Distinguishes between emotional reaction and reasoned judgement",
+        "Logic flows: judgement → strongest supporting reason → honest acknowledgement of the other side",
+      ],
+      dimension: "Argumentation",
+    },
+    {
+      kind: "choice",
+      label: "Framing",
+      question: "Which of these describes the most defensible way to decide between Aramayo and Beaumont's positions?",
+      options: [
+        { id: "a", text: "Whichever position is more popular among faculty should win", quality: "poor" },
+        { id: "b", text: "Trial both approaches and see which produces better assessment outcomes", quality: "acceptable" },
+        { id: "c", text: "Clarify what the weekly essay is actually for — only then can you judge which position fits", quality: "best" },
+        { id: "d", text: "There is no defensible way — it's a matter of taste", quality: "poor" },
+      ],
+      requireJustification: true,
+      justificationPrompt: "Why is this the strongest way to frame the decision?",
+      justificationMax: 60,
+      dimension: "Content Quality",
+    },
+  ],
+  scoringDimensions: [
+    { name: "Task Achievement", description: "Engaged with both positions as given — compared their reasoning rather than drifting into your own unrelated views." },
+    { name: "Content Quality", description: "How accurately you read each position and how precisely you identified where they actually diverge." },
+    { name: "Argumentation", description: "How clearly you structured your weighted judgement — position, reasoning, acknowledgement of the rejected side." },
+    { name: "Critical Thinking", description: "How carefully you weighed the strengths and weaknesses of each perspective — not just which you agreed with." },
+  ],
+  productLine: "academic",
+};
+
+
+// ─── Academic Task: Justified Judgement ──────────────────────
+// The candidate is asked to reach a judgement on an open question,
+// anticipate the strongest counter-argument, and defend their position
+// against it. Self-contained — all context provided in-task.
+
+const JUSTIFIED_JUDGEMENT: ScenarioTaskDef = {
+  id: "justified-judgement",
+  shortTitle: "Justified Judgement",
+  accentColor: "#c084fc",
+  screens: [
+    {
+      kind: "briefing",
+      badge: "FEAT Academic",
+      title: "Justified",
+      titleEmphasis: "Judgement",
+      subtitle: "Take a position on an open question — and defend it against its strongest opposition.",
+      objective: "Reach a judgement on an open academic question, anticipate the strongest counter-argument against your position, and defend your position against it.",
+      criteria: [
+        "Takes a clear position on the actual question, not a safer adjacent one",
+        "Supports the position with reasoning drawn from the materials",
+        "Anticipates the strongest — not the weakest — counter-argument",
+        "Defends the position without dismissing the counter",
+        "Acknowledges where the position is limited or conditional",
+      ],
+      stakeholder: [
+        { title: "Why this task exists", body: "The defining skill of a university graduate is the ability to take a position and defend it under serious objection. This task isolates that skill — strong candidates can hold their ground against the best version of the opposing view." },
+        { title: "What it replaces", body: "Opinion essays that ask 'what do you think?' and reward any fluent answer. This demands judgement, anticipation, and structured defence." },
+        { title: "How it is scored", body: "Quality of the judgement, quality of the anticipated counter-argument (steelmanning, not strawmanning), and the cogency of the defence against it." },
+      ],
+    },
+    {
+      kind: "scenario",
+      label: "The question",
+      title: "An open academic question",
+      body: "A university is considering whether to make every undergraduate degree a four-year programme, with the additional year spent on a structured research project instead of optional coursework.\n\nSupporters argue this would raise the intellectual level of undergraduate education and produce graduates more ready for research-intensive careers or postgraduate study. They also argue that a year of structured project work is a better preparation for complex professional life than a year of additional lectures.\n\nOpponents argue that the extra year increases cost, delays the student's entry into the workforce, and assumes all students benefit from research-style work — when many students will go into careers where the project skill is irrelevant.\n\nBoth arguments are presented at their strongest. You are asked to reach your own judgement.",
+      pinAsReference: true,
+    },
+    {
+      kind: "multi-select",
+      label: "Key considerations",
+      question: "Which of these are genuine considerations for a defensible judgement on this question? Select all that apply.",
+      options: [
+        { id: "a", text: "Who the degree is for — the 20% of students heading into research or the 80% heading elsewhere", correct: true },
+        { id: "b", text: "Whether the additional year's cost falls on students, the state, or the institution", correct: true },
+        { id: "c", text: "Whether a research project is actually more formative than an extra year of coursework", correct: true },
+        { id: "d", text: "Whether the university's current three-year degree is already internationally respected", correct: true },
+        { id: "e", text: "Whether the university's buildings are large enough to host four-year students", correct: false },
+      ],
+      minSelect: 3,
+      maxSelect: 5,
+      requireJustification: true,
+      justificationPrompt: "Which consideration, in your view, should weigh most heavily — and why?",
+      justificationMax: 80,
+      dimension: "Task Achievement",
+    },
+    {
+      kind: "short-text",
+      label: "Your position",
+      question: "State your position on the question and your single strongest reason for it.",
+      constraints: [
+        "Maximum 80 words",
+        "Position must be clear — not 'it depends'",
+        "Reason must be specific, not generic",
+      ],
+      maxWords: 80,
+      scoringHints: [
+        "Position is unambiguous (for, against, or a defensible conditional position)",
+        "The reason connects to the materials provided — not just intuition",
+        "Specific enough that a reader could disagree with it on those terms",
+        "Avoids fence-sitting dressed up as nuance",
+      ],
+      dimension: "Argumentation",
+    },
+    {
+      kind: "short-text",
+      label: "Strongest counter",
+      question: "Now state the single strongest objection to your position — the one you would find hardest to answer. Do not weaken it.",
+      constraints: [
+        "Maximum 80 words",
+        "Must genuinely be the strongest objection, not an easy one",
+        "Write it as an opponent would — without softening",
+      ],
+      maxWords: 80,
+      scoringHints: [
+        "Counter-argument is genuinely strong — not a straw version the candidate can easily knock down",
+        "Written with fair-minded phrasing, not dismissive framing",
+        "Targets the actual weakness in the candidate's position, not a tangential point",
+        "Shows the candidate has thought seriously about what could defeat their view",
+      ],
+      dimension: "Critical Thinking",
+    },
+    {
+      kind: "short-text",
+      label: "Defence",
+      question: "Defend your position against the counter-argument you just stated. Do not repeat your original reasoning — respond to the objection.",
+      constraints: [
+        "Maximum 100 words",
+        "Respond to the specific objection — do not pivot",
+        "Concede anything that genuinely should be conceded",
+        "Show why the objection is real but non-decisive",
+      ],
+      maxWords: 100,
+      scoringHints: [
+        "Addresses the objection directly, not a softer variant",
+        "Concedes whatever genuinely must be conceded — e.g. extra cost, uneven fit",
+        "Shows why the objection, though real, doesn't overturn the position",
+        "Avoids restating the original argument as if the objection wasn't made",
+        "Uses academic register — disagrees without dismissing",
+      ],
+      dimension: "Argumentation",
+    },
+    {
+      kind: "choice",
+      label: "Scope of your claim",
+      question: "Which statement best captures the honest scope of the position you are defending?",
+      options: [
+        { id: "a", text: "My position is a general principle that should apply to all universities", quality: "poor" },
+        { id: "b", text: "My position is strongest under specific conditions — where those conditions fail, it may not hold", quality: "best" },
+        { id: "c", text: "My position is a personal preference; I would not press it on others", quality: "poor" },
+        { id: "d", text: "My position captures a real trade-off and reaches a defensible judgement within it", quality: "best" },
+      ],
+      requireJustification: true,
+      justificationPrompt: "State the conditions under which your position is strongest — and where it is weakest.",
+      justificationMax: 80,
+      dimension: "Content Quality",
+    },
+  ],
+  scoringDimensions: [
+    { name: "Task Achievement", description: "Engaged with the actual question — took a position on what was asked, not a safer adjacent topic." },
+    { name: "Content Quality", description: "How substantively you drew on the materials to support your judgement and honestly scoped its claim." },
+    { name: "Argumentation", description: "How well your position, counter-argument, and defence held together as a structured case." },
+    { name: "Critical Thinking", description: "How seriously you anticipated the strongest objection and engaged with it on its own terms." },
+  ],
+  productLine: "academic",
 };
 
 
@@ -1078,11 +1368,22 @@ export const SCENARIO_TASKS: Record<string, ScenarioTaskDef> = {
   "info-priority": INFO_PRIORITY,
   argument: ARGUMENT_EVAL,
   "data-literacy": DATA_LITERACY,
-  "explain-simply": EXPLAIN_SIMPLY,
+  "interpretation-evaluation": INTERPRETATION_EVAL,
+  "weighing-alternatives": WEIGHING_ALTERNATIVES,
+  "justified-judgement": JUSTIFIED_JUDGEMENT,
   "prof-comm": PROF_COMM,
   interpersonal: INTERPERSONAL,
 };
 
 export const SCENARIO_TASK_LIST = [OJT, CPD, AI_POLICY, INFO_PRIORITY, ARGUMENT_EVAL];
 export const PROFESSIONAL_TASK_LIST = [OJT, AI_POLICY, INFO_PRIORITY, PROF_COMM, INTERPERSONAL];
-export const ACADEMIC_TASK_LIST = [DATA_LITERACY, EXPLAIN_SIMPLY, ARGUMENT_EVAL];
+
+/** The five FEAT Academic tasks in the construct's intended cognitive order —
+ *  receptive evaluation → comparison → interpretation → productive judgement. */
+export const ACADEMIC_TASK_LIST = [
+  DATA_LITERACY,
+  ARGUMENT_EVAL,
+  WEIGHING_ALTERNATIVES,
+  INTERPRETATION_EVAL,
+  JUSTIFIED_JUDGEMENT,
+];

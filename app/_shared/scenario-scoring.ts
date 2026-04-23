@@ -4,25 +4,38 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import type { ScenarioTaskDef, Screen } from "./scenario-types";
+import {
+  type ScoreLevel,
+  type Outcome,
+  SCORE_LEVEL_LABELS,
+  OUTCOME_LABELS,
+  scoreLevelFromNumeric,
+  deriveAcademicOutcome,
+  type DimensionScore,
+} from "./scoreLevel";
 
 // ─── Types ────────────────────────────────────────────────────
 
-export type Band = "strong" | "developing" | "needs-work";
+/** @deprecated Alias for ScoreLevel kept only so downstream imports don't break
+ *  during migration. Prefer `ScoreLevel` from `./scoreLevel`. */
+export type Band = ScoreLevel;
 
 export type ScreenFeedback = {
   screenIndex: number;
   label: string;
   score: number;          // 0–1
-  band: Band;
+  band: ScoreLevel;
   feedback: string;       // one-line comment
   bestAnswer?: string;    // what ideal looked like
   scoringHints?: string[];// for short-text screens
+  /** Which construct dimension this screen contributes to, if tagged. */
+  dimension?: string;
 };
 
 export type DimensionResult = {
   name: string;
   description: string;
-  band: Band;
+  band: ScoreLevel;
   feedback: string;
 };
 
@@ -35,9 +48,16 @@ export type LearnerFeedback = {
 export type TaskReport = {
   screenFeedback: ScreenFeedback[];
   overallScore: number;
-  overallBand: Band;
+  /** Overall outcome. For Academic tasks this may be "InsufficientEvidence"
+   *  (off-scale); for other product lines it is always a ScoreLevel. */
+  overallBand: Outcome;
   dimensions: DimensionResult[];
   learnerFeedback: LearnerFeedback;
+  /** Academic: true when the dimension profile warrants reviewer attention
+   *  (e.g. significant divergence, or Insufficient Evidence). */
+  reviewerFlag?: boolean;
+  /** Human-readable reason for the reviewer flag, when set. */
+  flagReason?: string | null;
 };
 
 type Answer = {
@@ -50,14 +70,12 @@ type Answer = {
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function toBand(score: number): Band {
-  if (score >= 0.7) return "strong";
-  if (score >= 0.4) return "developing";
-  return "needs-work";
+function toBand(score: number): ScoreLevel {
+  return scoreLevelFromNumeric(score);
 }
 
-function bandLabel(b: Band): string {
-  return b === "strong" ? "Strong" : b === "developing" ? "Developing" : "Needs work";
+function bandLabel(b: Outcome): string {
+  return OUTCOME_LABELS[b];
 }
 
 /** Kendall-tau-like distance: proportion of pairs in correct relative order */
@@ -102,6 +120,7 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
         screenFeedback.push({
           screenIndex: answer.screenIndex, label, score, band: toBand(score), feedback,
           bestAnswer: best && chosen?.id !== best.id ? best.text : undefined,
+          dimension: (screen as { dimension?: string }).dimension,
         });
         break;
       }
@@ -122,6 +141,7 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
         screenFeedback.push({
           screenIndex: answer.screenIndex, label, score, band: toBand(score), feedback,
           bestAnswer: best && chosen?.id !== best.id ? best.text : undefined,
+          dimension: (screen as { dimension?: string }).dimension,
         });
         break;
       }
@@ -146,6 +166,7 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
         screenFeedback.push({
           screenIndex: answer.screenIndex, label, score, band: toBand(score), feedback,
           bestAnswer: missedTexts.length > 0 ? `Also important: ${missedTexts.join("; ")}` : undefined,
+          dimension: (screen as { dimension?: string }).dimension,
         });
         break;
       }
@@ -164,6 +185,7 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
         screenFeedback.push({
           screenIndex: answer.screenIndex, label, score, band: toBand(score), feedback,
           bestAnswer: topActual !== topIdeal && idealTopText ? `Top priority should be: ${idealTopText}` : undefined,
+          dimension: (screen as { dimension?: string }).dimension,
         });
         break;
       }
@@ -171,9 +193,10 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
       case "short-text": {
         // Can't auto-score free text — give neutral score, show what we look for
         screenFeedback.push({
-          screenIndex: answer.screenIndex, label, score: 0.5, band: "developing",
+          screenIndex: answer.screenIndex, label, score: 0.5, band: "Competent",
           feedback: "Free-text responses are evaluated against the criteria below. In production, an AI judge would score this.",
           scoringHints: screen.scoringHints,
+          dimension: (screen as { dimension?: string }).dimension,
         });
         break;
       }
@@ -183,7 +206,16 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
   // Overall score: average of all screen scores
   const scorable = screenFeedback.filter(sf => sf.score !== undefined);
   const overallScore = scorable.length > 0 ? scorable.reduce((sum, sf) => sum + sf.score, 0) / scorable.length : 0.5;
-  const overallBand = toBand(overallScore);
+
+  // ─── Branch on product line ─────────────────────────────────
+  // Academic tasks apply the construct gate logic (Task Achievement validity
+  // gate, Critical Thinking upper gate, InsufficientEvidence off-scale).
+  // Non-academic tasks keep the round-robin dimension mapping.
+  if (task.productLine === "academic") {
+    return buildAcademicReport(task, answers, screenFeedback, overallScore);
+  }
+
+  const overallBand: Outcome = toBand(overallScore);
 
   // Map dimensions — distribute screen scores across dimensions
   const autoScored = screenFeedback.filter(sf => sf.scoringHints === undefined);
@@ -194,245 +226,382 @@ export function scoreTask(task: ScenarioTaskDef, answers: Answer[]): TaskReport 
       : undefined;
     const dimScore = mapped ? mapped.score : overallScore;
     const dimBand = toBand(dimScore);
-    const feedback = dimBand === "strong"
+    const feedback = dimBand === "Distinction" || dimBand === "Merit"
       ? `Your responses showed strong ${dim.name.toLowerCase()}.`
-      : dimBand === "developing"
+      : dimBand === "Competent"
       ? `Your ${dim.name.toLowerCase()} was adequate but could be sharper.`
       : `${dim.name} needs more attention — review the feedback on individual screens.`;
     return { name: dim.name, description: dim.description, band: dimBand, feedback };
   });
 
   // ─── Learner-facing feedback ────────────────────────────────
-  const learnerFeedback = buildLearnerFeedback(task.id, screenFeedback, dimensions, overallBand);
+  const learnerFeedback = buildLearnerFeedback(task.id, screenFeedback, dimensions, toBand(overallScore));
 
   return { screenFeedback, overallScore, overallBand, dimensions, learnerFeedback };
 }
 
+// ─── Academic scoring ─────────────────────────────────────────
+//
+// Groups screen feedback by construct dimension, averages within each,
+// detects insufficient-evidence conditions, and applies the construct's
+// gate logic (scoreLevel.deriveAcademicOutcome) to produce the final
+// outcome.
+
+function countWords(text: string | undefined): number {
+  if (!text) return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function detectInsufficientEvidence(
+  task: ScenarioTaskDef,
+  answers: Answer[],
+  screenFeedback: ScreenFeedback[],
+): { flagged: boolean; reason: string | null } {
+  // Total candidate text across short-text responses
+  const textWords = answers.reduce((sum, a) => sum + countWords(a.text), 0);
+  if (textWords < 30) {
+    return { flagged: true, reason: "Written response too short to evaluate reasoning across all four dimensions." };
+  }
+
+  // Completion check: more than half of scoring screens unanswered
+  const scoringKinds = new Set(["choice", "multi-select", "short-text", "rank", "evidence-select"]);
+  const scoringScreenIdx = task.screens
+    .map((s, i) => (scoringKinds.has(s.kind) ? i : -1))
+    .filter(i => i >= 0);
+  const answered = new Set(screenFeedback.map(sf => sf.screenIndex));
+  const missing = scoringScreenIdx.filter(i => !answered.has(i));
+  if (scoringScreenIdx.length > 0 && missing.length / scoringScreenIdx.length > 0.5) {
+    return { flagged: true, reason: "Too many scoring screens were left without a response." };
+  }
+
+  return { flagged: false, reason: null };
+}
+
+function buildAcademicReport(
+  task: ScenarioTaskDef,
+  answers: Answer[],
+  screenFeedback: ScreenFeedback[],
+  overallScore: number,
+): TaskReport {
+  // Group screen scores by their tagged construct dimension
+  const byDim = new Map<string, ScreenFeedback[]>();
+  for (const sf of screenFeedback) {
+    if (!sf.dimension) continue;
+    const bucket = byDim.get(sf.dimension) ?? [];
+    bucket.push(sf);
+    byDim.set(sf.dimension, bucket);
+  }
+
+  // Compute per-dimension level
+  const dimensionScores: DimensionScore[] = task.scoringDimensions.map(dim => {
+    const feedbacks = byDim.get(dim.name) ?? [];
+    const avg = feedbacks.length
+      ? feedbacks.reduce((s, f) => s + f.score, 0) / feedbacks.length
+      : overallScore;
+    return { name: dim.name, level: scoreLevelFromNumeric(avg) };
+  });
+
+  const dimensions: DimensionResult[] = task.scoringDimensions.map((dim, i) => {
+    const ds = dimensionScores[i];
+    const feedbacks = byDim.get(dim.name) ?? [];
+    const hasScreens = feedbacks.length > 0;
+    const feedback = !hasScreens
+      ? `No screens were tagged to this dimension. Reviewer attention recommended.`
+      : ds.level === "Distinction"
+      ? `Strong performance — responses consistently demonstrated ${dim.name.toLowerCase()}.`
+      : ds.level === "Merit"
+      ? `Solid performance on ${dim.name.toLowerCase()}, with room to sharpen further.`
+      : ds.level === "Competent"
+      ? `Adequate ${dim.name.toLowerCase()} — the reasoning held together but was uneven.`
+      : `${dim.name} needs significant attention — see the per-screen feedback.`;
+    return { name: dim.name, description: dim.description, band: ds.level, feedback };
+  });
+
+  // Insufficient Evidence detection — overrides any gate logic
+  const { flagged, reason } = detectInsufficientEvidence(task, answers, screenFeedback);
+
+  const { outcome, reviewerFlag, flagReason } = deriveAcademicOutcome(dimensionScores, flagged);
+
+  const learnerFeedback = buildLearnerFeedback(
+    task.id,
+    screenFeedback,
+    dimensions,
+    outcome === "InsufficientEvidence" ? "NotYetCompetent" : outcome,
+  );
+
+  return {
+    screenFeedback,
+    overallScore,
+    overallBand: outcome,
+    dimensions,
+    learnerFeedback,
+    reviewerFlag: reviewerFlag || flagged,
+    flagReason: flagReason ?? reason ?? null,
+  };
+}
+
 // ─── Learner feedback builder ─────────────────────────────────
 
-/** Per-task focus-area tips keyed by dimension name → band */
-const FOCUS_TIPS: Record<string, Record<string, Record<Band, string>>> = {
+/** Per-task focus-area tips keyed by dimension name → score level.
+ *  Partial because not every tier carries a tip — Distinction entries are
+ *  intentionally blank (per-screen feedback handles excellence), and Merit
+ *  entries are left to be filled in per-task as the product matures. */
+const FOCUS_TIPS: Record<string, Record<string, Partial<Record<ScoreLevel, string>>>> = {
   ojt: {
     "Decision Quality": {
-      strong: "",
-      developing: "Before choosing an action, list the consequences of each option. Ask: 'What happens if I do this and it doesn't work?'",
-      "needs-work": "Start with the most urgent problem. When there are multiple options, eliminate the ones that only delay the situation — look for actions that move things forward.",
+      Distinction: "",
+      Competent: "Before choosing an action, list the consequences of each option. Ask: 'What happens if I do this and it doesn't work?'",
+      NotYetCompetent: "Start with the most urgent problem. When there are multiple options, eliminate the ones that only delay the situation — look for actions that move things forward.",
     },
     "Justification Logic": {
-      strong: "",
-      developing: "When explaining your reasoning, name the specific people affected and the time pressure involved — not just what feels right.",
-      "needs-work": "Try using the format: 'I chose this because [stakeholder] needs [outcome] within [timeframe].' This forces you to connect your choice to real consequences.",
+      Distinction: "",
+      Competent: "When explaining your reasoning, name the specific people affected and the time pressure involved — not just what feels right.",
+      NotYetCompetent: "Try using the format: 'I chose this because [stakeholder] needs [outcome] within [timeframe].' This forces you to connect your choice to real consequences.",
     },
     "Escalation Judgment": {
-      strong: "",
-      developing: "Escalation isn't about passing the problem — it's about getting the right authority involved at the right time. Ask: 'Can I still fix this alone, or do I need someone with more authority?'",
-      "needs-work": "Escalate when the situation is beyond what your role can resolve — not before you've tried, and not after it's too late. The trigger here was: the trainer confirmed they won't come.",
+      Distinction: "",
+      Competent: "Escalation isn't about passing the problem — it's about getting the right authority involved at the right time. Ask: 'Can I still fix this alone, or do I need someone with more authority?'",
+      NotYetCompetent: "Escalate when the situation is beyond what your role can resolve — not before you've tried, and not after it's too late. The trigger here was: the trainer confirmed they won't come.",
     },
     "Communication Quality": {
-      strong: "",
-      developing: "A good status message has three parts: acknowledge the problem, say what's happening now, give a clear next step. Keep it short.",
-      "needs-work": "When writing under pressure, use this structure: (1) what happened, (2) what we're doing, (3) what you need to do. Avoid blame and keep the tone calm.",
+      Distinction: "",
+      Competent: "A good status message has three parts: acknowledge the problem, say what's happening now, give a clear next step. Keep it short.",
+      NotYetCompetent: "When writing under pressure, use this structure: (1) what happened, (2) what we're doing, (3) what you need to do. Avoid blame and keep the tone calm.",
     },
   },
   cpd: {
     "Problem Diagnosis": {
-      strong: "",
-      developing: "Look beyond the obvious. 'Mixed levels' is a symptom — the cause is often lack of differentiation in the task design itself.",
-      "needs-work": "When diagnosing a classroom problem, separate what you can see (symptoms) from what's causing it (root causes). Multiple causes often work together.",
+      Distinction: "",
+      Competent: "Look beyond the obvious. 'Mixed levels' is a symptom — the cause is often lack of differentiation in the task design itself.",
+      NotYetCompetent: "When diagnosing a classroom problem, separate what you can see (symptoms) from what's causing it (root causes). Multiple causes often work together.",
     },
     "Impact Awareness": {
-      strong: "",
-      developing: "Be specific about impact. 'Students struggle' is vague — 'weaker students stop participating because the task is above their level' is actionable.",
-      "needs-work": "Think about impact from the student's perspective. How does this problem affect someone at the bottom of the class vs the top? What do they each experience?",
+      Distinction: "",
+      Competent: "Be specific about impact. 'Students struggle' is vague — 'weaker students stop participating because the task is above their level' is actionable.",
+      NotYetCompetent: "Think about impact from the student's perspective. How does this problem affect someone at the bottom of the class vs the top? What do they each experience?",
     },
     "Strategy Practicality": {
-      strong: "",
-      developing: "Good strategies name a concrete action, not just an approach. 'Use group work' is vague. 'Assign mixed-ability pairs with role cards so the weaker student has a defined contribution' is practical.",
-      "needs-work": "For each strategy, ask yourself: could a colleague walk into my classroom and do this tomorrow with no extra materials? If not, simplify it.",
+      Distinction: "",
+      Competent: "Good strategies name a concrete action, not just an approach. 'Use group work' is vague. 'Assign mixed-ability pairs with role cards so the weaker student has a defined contribution' is practical.",
+      NotYetCompetent: "For each strategy, ask yourself: could a colleague walk into my classroom and do this tomorrow with no extra materials? If not, simplify it.",
     },
     "Pedagogical Awareness": {
-      strong: "",
-      developing: "Show that you understand why a strategy works, not just that it exists. Tiered tasks work because they let every student succeed at their level — say that.",
-      "needs-work": "Focus on three core ideas: differentiation (different tasks for different levels), scaffolding (support that you can gradually remove), and engagement (tasks that require active participation).",
+      Distinction: "",
+      Competent: "Show that you understand why a strategy works, not just that it exists. Tiered tasks work because they let every student succeed at their level — say that.",
+      NotYetCompetent: "Focus on three core ideas: differentiation (different tasks for different levels), scaffolding (support that you can gradually remove), and engagement (tasks that require active participation).",
     },
     "Decision Quality": {
-      strong: "",
-      developing: "Under constraints, pick the strategy that gives the most impact for the least setup. Tiered tasks can be created with a single handout by adjusting the expected output.",
-      "needs-work": "When you have limited time and no extra materials, the best strategies are ones you can explain in one sentence and students can start immediately.",
+      Distinction: "",
+      Competent: "Under constraints, pick the strategy that gives the most impact for the least setup. Tiered tasks can be created with a single handout by adjusting the expected output.",
+      NotYetCompetent: "When you have limited time and no extra materials, the best strategies are ones you can explain in one sentence and students can start immediately.",
     },
   },
   "ai-policy": {
     "Risk Detection": {
-      strong: "",
-      developing: "When evaluating AI output, check three things: Is it pedagogically sound? Is it realistic? Does it match how people actually learn?",
-      "needs-work": "AI-generated content often looks professional but contains fundamental problems. Read it as if a new teacher wrote it — what would you correct?",
+      Distinction: "",
+      Competent: "When evaluating AI output, check three things: Is it pedagogically sound? Is it realistic? Does it match how people actually learn?",
+      NotYetCompetent: "AI-generated content often looks professional but contains fundamental problems. Read it as if a new teacher wrote it — what would you correct?",
     },
     "Policy Alignment": {
-      strong: "",
-      developing: "When checking against policy, go point by point. Don't just say 'it doesn't meet policy' — name which specific requirement it fails.",
-      "needs-work": "Read the policy as a checklist. For each point, ask: does this AI output meet this requirement? If not, write down exactly where it fails.",
+      Distinction: "",
+      Competent: "When checking against policy, go point by point. Don't just say 'it doesn't meet policy' — name which specific requirement it fails.",
+      NotYetCompetent: "Read the policy as a checklist. For each point, ask: does this AI output meet this requirement? If not, write down exactly where it fails.",
     },
     "Adaptation Quality": {
-      strong: "",
-      developing: "When rewriting AI content, don't just polish the language. Fix the underlying approach — change what students actually do, not just how it's described.",
-      "needs-work": "Start your rewrite by listing what's wrong, then fix each problem. A good adaptation changes the activities, not just the wording.",
+      Distinction: "",
+      Competent: "When rewriting AI content, don't just polish the language. Fix the underlying approach — change what students actually do, not just how it's described.",
+      NotYetCompetent: "Start your rewrite by listing what's wrong, then fix each problem. A good adaptation changes the activities, not just the wording.",
     },
     "Reasoning Clarity": {
-      strong: "",
-      developing: "When justifying your decisions, connect each point to a specific reason. 'This is wrong because...' is better than 'I don't think this works.'",
-      "needs-work": "Practice the 'because' test: every judgment you make should end with 'because [specific reason].' If you can't finish the sentence, your reasoning needs more thought.",
+      Distinction: "",
+      Competent: "When justifying your decisions, connect each point to a specific reason. 'This is wrong because...' is better than 'I don't think this works.'",
+      NotYetCompetent: "Practice the 'because' test: every judgment you make should end with 'because [specific reason].' If you can't finish the sentence, your reasoning needs more thought.",
     },
   },
   "info-priority": {
     "Prioritisation Accuracy": {
-      strong: "",
-      developing: "Urgency isn't just about deadlines — it's about who is affected and what happens if you wait. Prioritise actions that reduce uncertainty for the most people.",
-      "needs-work": "When prioritising, ask: 'If I do nothing about this for 15 minutes, what happens?' The items where the answer is 'things get worse' go to the top.",
+      Distinction: "",
+      Competent: "Urgency isn't just about deadlines — it's about who is affected and what happens if you wait. Prioritise actions that reduce uncertainty for the most people.",
+      NotYetCompetent: "When prioritising, ask: 'If I do nothing about this for 15 minutes, what happens?' The items where the answer is 'things get worse' go to the top.",
     },
     "Logical Reasoning": {
-      strong: "",
-      developing: "When explaining priorities, name the specific consequence of delay. 'Participants need to know' is weak. 'Three people are about to leave because they think it's cancelled' is strong.",
-      "needs-work": "Your reasoning should answer three questions: What's the most urgent thing? Why is it more urgent than the others? What happens if I do it later instead of now?",
+      Distinction: "",
+      Competent: "When explaining priorities, name the specific consequence of delay. 'Participants need to know' is weak. 'Three people are about to leave because they think it's cancelled' is strong.",
+      NotYetCompetent: "Your reasoning should answer three questions: What's the most urgent thing? Why is it more urgent than the others? What happens if I do it later instead of now?",
     },
     "Adaptability": {
-      strong: "",
-      developing: "When conditions change, re-evaluate from scratch. Don't just slot the new information into your existing plan — ask whether your whole approach still makes sense.",
-      "needs-work": "The twist changed the situation significantly. When that happens, stop, re-read the new information, and re-rank everything. Your first priority might need to change completely.",
+      Distinction: "",
+      Competent: "When conditions change, re-evaluate from scratch. Don't just slot the new information into your existing plan — ask whether your whole approach still makes sense.",
+      NotYetCompetent: "The twist changed the situation significantly. When that happens, stop, re-read the new information, and re-rank everything. Your first priority might need to change completely.",
     },
     "Communication Clarity": {
-      strong: "",
-      developing: "Under pressure, keep messages to three sentences: what happened, what we're doing, what you should do. No background, no apologies, just clarity.",
-      "needs-work": "When people are waiting for information, they need facts, not reassurance. Tell them: the situation, the plan, and what to do next. Keep it under 40 words.",
+      Distinction: "",
+      Competent: "Under pressure, keep messages to three sentences: what happened, what we're doing, what you should do. No background, no apologies, just clarity.",
+      NotYetCompetent: "When people are waiting for information, they need facts, not reassurance. Tell them: the situation, the plan, and what to do next. Keep it under 40 words.",
     },
   },
   argument: {
-    "Claim Identification": {
-      strong: "",
-      developing: "A claim is the main point the author is trying to convince you of — not a summary of everything they said. Ask: 'What is this person arguing for?'",
-      "needs-work": "To find the main claim, look for the sentence that everything else supports. In Text A, every point leads to 'online learning is the future.' That's the claim.",
+    "Task Achievement": {
+      Distinction: "",
+      Competent: "Read each memo for what it actually claims, not what it reminds you of. Dr. Osei and Dr. Yıldız disagree on a specific question — your job is to engage with that disagreement precisely.",
+      NotYetCompetent: "Start by writing each author's claim in one sentence. The claim is what they want you to believe, not the topic they're writing about. If your summary could apply to either memo, it's not precise enough.",
     },
-    "Evaluation Quality": {
-      strong: "",
-      developing: "When comparing arguments, don't just say which one you agree with. Look at the quality of reasoning: which one has better evidence, fewer assumptions, and stronger logic?",
-      "needs-work": "Stronger arguments have: specific evidence (not just claims), limited assumptions, and logical connections between points. Compare the texts on these three criteria.",
+    "Content Quality": {
+      Distinction: "",
+      Competent: "When evaluating evidence, ask: is it specific, is it from a credible source, does it directly support the claim? A research study controlling for motivation is different in kind from a blog post by one lecturer.",
+      NotYetCompetent: "Evidence ranks on three things: reliability of the source, directness of the link to the claim, and vulnerability to obvious counter-examples. Grade each option against those three.",
     },
-    "Weakness Detection": {
-      strong: "",
-      developing: "Common weaknesses: overgeneralisation (claiming too much from limited evidence), ignoring alternatives, and assuming causation from correlation.",
-      "needs-work": "Look for words like 'all,' 'always,' 'clear,' 'obvious' — they often signal overgeneralisation. Then check: is the evidence really strong enough for that conclusion?",
+    "Argumentation": {
+      Distinction: "",
+      Competent: "A strong argument has three parts: a clear position, a reason, and evidence or an example. Make sure yours has all three, in that order, and acknowledge the opposing position.",
+      NotYetCompetent: "Use this structure: 'I believe [position] because [reason]. For example, [evidence].' Then add one sentence acknowledging the strongest point on the other side — that shows balanced reasoning.",
     },
-    "Evidence Judgment": {
-      strong: "",
-      developing: "Good evidence is specific, from a credible source, and directly relevant. A blog post or headline is not as strong as a research study.",
-      "needs-work": "When choosing evidence, ask: (1) Is it from a reliable source? (2) Does it directly support the point? (3) Could someone argue against it easily? The best evidence passes all three tests.",
-    },
-    "Argument Construction": {
-      strong: "",
-      developing: "A strong argument has three parts: a clear position, a reason, and evidence. Make sure yours has all three, in that order.",
-      "needs-work": "Use this structure: 'I believe [position] because [reason]. For example, [evidence].' Then add one sentence acknowledging the other side to show balanced thinking.",
+    "Critical Thinking": {
+      Distinction: "",
+      Competent: "Common argument weaknesses: overgeneralisation (claiming too much from limited evidence), ignoring alternatives, assuming causation from correlation. Name the specific flaw, don't just disagree.",
+      NotYetCompetent: "Look for words like 'all,' 'always,' 'clear,' 'obvious' — they often signal overgeneralisation. Then check: is the evidence really strong enough for that conclusion, or could it point somewhere else entirely?",
     },
   },
   "data-literacy": {
-    "Problem Detection": {
-      strong: "",
-      developing: "When looking at a chart, check three things systematically: the axes (are they honest?), the sample (is it big enough?), and the question (did it change?).",
-      "needs-work": "Start with the y-axis. If it doesn't start at zero, ask why. Then check the sample size — 12 people is not the same as 1,200. These are the most common tricks in data presentation.",
+    "Task Achievement": {
+      Distinction: "",
+      Competent: "Engage with THIS chart — the specific numbers, the specific claim. A generic critique of 'truncated y-axes' doesn't show you read the actual data. Name what you're looking at.",
+      NotYetCompetent: "Before you evaluate, summarise: what does this chart actually show, and what does its title claim? The gap between those two is the thing you're analysing.",
     },
-    "Causal Reasoning": {
-      strong: "",
-      developing: "Correlation is not causation. When two things happen at the same time, ask: what else changed? In this case, a competitor closing is a huge confounding variable.",
-      "needs-work": "Just because B happened after A doesn't mean A caused B. To establish causation, you need to rule out other explanations. List every other thing that changed in the same period.",
+    "Content Quality": {
+      Distinction: "",
+      Competent: "An honest title states what was measured and what changed — without implying a cause. 'Satisfaction scores increased' is different from 'Training improved satisfaction.' Your rewrite needs to reflect the actual data.",
+      NotYetCompetent: "Your rewrite should remove any causal claim and acknowledge what changed. Try: '[Metric] changed from X to Y between [dates]' as a starting point, then add the context that qualifies it.",
     },
-    "Data Reinterpretation": {
-      strong: "",
-      developing: "An honest title states what was measured and what changed — without implying a cause. 'Satisfaction scores increased' is different from 'Training improved satisfaction.'",
-      "needs-work": "Your rewrite should remove any causal claim and acknowledge what changed. Try: '[Metric] changed from X to Y between [dates]' as a starting point, then add relevant context.",
+    "Argumentation": {
+      Distinction: "",
+      Competent: "A good board summary has three sentences: what the data shows, what it doesn't prove, and what to measure next. That shape works for almost any data communication under uncertainty.",
+      NotYetCompetent: "Structure your summary: (1) the fact, (2) the caveat, (3) the next step. Don't skip any of the three. Lead with the fact, not the caveat — that's how a board reads.",
     },
-    "Communication Clarity": {
-      strong: "",
-      developing: "When writing for a non-technical audience, lead with what you know, then what you don't know, then what to do next. That structure works for almost any data summary.",
-      "needs-work": "A good board summary has three sentences: what the data shows, why we should be cautious about the conclusion, and what we should measure next. Keep it factual and constructive.",
+    "Critical Thinking": {
+      Distinction: "",
+      Competent: "Correlation is not causation. When two things happen at the same time, ask: what else changed? In this case, a competitor closing is a huge confounding variable — at least as likely an explanation as the training.",
+      NotYetCompetent: "Just because B happened after A doesn't mean A caused B. To establish causation, you need to rule out other explanations. List everything else that changed in the same period before you credit the training.",
     },
   },
-  "explain-simply": {
-    "Core Accuracy": {
-      strong: "",
-      developing: "Simplifying doesn't mean leaving things out. The core mechanism (interest earning interest) must be in your explanation — without it, the person won't understand why compound interest is special.",
-      "needs-work": "Check your explanation against this test: if someone only knew what you told them, would they understand why £1,000 grows faster in year 20 than year 1? If not, you've missed the key idea.",
+  "interpretation-evaluation": {
+    "Task Achievement": {
+      Distinction: "",
+      Competent: "The task has two halves — explain AND evaluate. Doing one well and skipping the other is a fail on this dimension. Make sure your response tackles both, not just the one you find easier.",
+      NotYetCompetent: "Read the task again. It asks you to (1) re-express Ziegler's framework in your own words, AND (2) evaluate its assumptions and scope. If you did only one, go back and do the other.",
     },
-    "Jargon Removal": {
-      strong: "",
-      developing: "Every technical term is a barrier. 'Principal' means nothing to most people. 'The money you started with' means the same thing and costs nothing in accuracy.",
-      "needs-work": "Read your explanation aloud. Every word that a non-expert would need to look up is jargon. Replace it with everyday language. If you can't replace it, explain it in the same sentence.",
+    "Content Quality": {
+      Distinction: "",
+      Competent: "Re-expression means capturing the structure, not just paraphrasing sentences. Ziegler's framework has three features plus a strong claim that failing any one means incoherence. Your version should preserve that structure.",
+      NotYetCompetent: "Three features, one strong claim. That's the whole framework. If your re-expression drops the strong claim, it's incomplete. If it adds anything Ziegler didn't say, it's inaccurate.",
     },
-    "Analogy Quality": {
-      strong: "",
-      developing: "A good analogy captures the mechanism, not just the outcome. A snowball works because it shows acceleration — the bigger it gets, the faster it grows. A ladder doesn't — it implies steady, linear progress.",
-      "needs-work": "The best analogies share the same structure as the concept. Compound interest accelerates over time. So your analogy needs to show something that speeds up, not just something that gets bigger.",
+    "Argumentation": {
+      Distinction: "",
+      Competent: "Your recommendation should take a clear position — apply, apply with caveats, or don't apply — and give reasons drawn from the framework itself, not from generic writing advice.",
+      NotYetCompetent: "State your position first. Then give one reason tied specifically to Ziegler's claims (not general writing advice). Then close with one acknowledgement of where the framework might still be useful.",
     },
-    "Adaptation": {
-      strong: "",
-      developing: "When someone says 'so it's just more interest?' — they've understood the surface but missed the acceleration. Address that specific gap rather than repeating your original explanation.",
-      "needs-work": "When someone is confused, don't start over. Listen to what they said, identify the specific thing they've missed, and address only that. Their confusion tells you exactly where to focus.",
+    "Critical Thinking": {
+      Distinction: "",
+      Competent: "Evaluation means naming specific assumptions and specific limits, not registering general discomfort. What does Ziegler's framework assume about what writing is for? Where does it break?",
+      NotYetCompetent: "Think about edge cases. Does the framework handle a paper that deliberately explores two competing ideas? Does it work for papers that open out rather than narrow down? That's where its strong claim starts to break.",
     },
-    "Tone & Accessibility": {
-      strong: "",
-      developing: "The best explanations sound like a conversation, not a lecture. Use 'you' and 'your money' — make it personal. Avoid 'one should consider' or 'it is important to note.'",
-      "needs-work": "Imagine you're explaining this to a friend over coffee. That's the tone you want. Warm, direct, no showing off. The goal is their understanding, not your credibility.",
+  },
+  "weighing-alternatives": {
+    "Task Achievement": {
+      Distinction: "",
+      Competent: "The task is to compare TWO positions, not to state your own view on AI in education. Stay with Aramayo and Beaumont — weigh their reasoning, not the general topic.",
+      NotYetCompetent: "Keep returning to what Aramayo and Beaumont actually said. If your response drifts into your own general views on AI, you're doing a different task. The question is whose reasoning holds up.",
+    },
+    "Content Quality": {
+      Distinction: "",
+      Competent: "The deepest disagreement isn't 'pro-AI vs anti-AI' — that's the surface. It's about what the weekly essay is FOR: a cognitive process, or a product to be assessed. Find the substantive point.",
+      NotYetCompetent: "When two people disagree, the useful question is: what underlying belief drives each view? Aramayo and Beaumont have different beliefs about the purpose of the assessment itself — that's the real disagreement.",
+    },
+    "Argumentation": {
+      Distinction: "",
+      Competent: "A weighted judgement has three parts: your position, your strongest reason, and an honest acknowledgement of what the rejected side gets right. All three matter — skipping the third makes you look one-sided.",
+      NotYetCompetent: "Structure: 'I find [memo] more persuasive because [specific reason from the memo]. Beaumont/Aramayo is right that [concession], but on balance [why your reason outweighs it].'",
+    },
+    "Critical Thinking": {
+      Distinction: "",
+      Competent: "Weighing means scoring both sides on the same criteria. Which memo has tighter reasoning? Which depends on more assumptions? Which engages the other? Answer those, not just which you prefer.",
+      NotYetCompetent: "Pick three criteria (specificity, assumptions, engagement with the other side) and grade each memo on them. The stronger memo should win on at least two. If you can't name criteria, you're voting, not weighing.",
+    },
+  },
+  "justified-judgement": {
+    "Task Achievement": {
+      Distinction: "",
+      Competent: "Take a position on THIS question — a four-year undergraduate degree with a structured research year — not on education in general. Specificity is what makes a judgement judgeable.",
+      NotYetCompetent: "Your position needs to answer the actual question: should all undergraduate degrees become four-year programmes with a research year? Not 'research is valuable' in general — yes or no on this proposal.",
+    },
+    "Content Quality": {
+      Distinction: "",
+      Competent: "Draw on the specific considerations in the scenario — cost, student population mix, the comparison between project work and coursework. Generic reasoning about 'university' doesn't count.",
+      NotYetCompetent: "Before you defend a position, list the considerations the scenario actually raises. Your reasoning should touch at least two of them. If it doesn't, you're defending something other than the specific proposal.",
+    },
+    "Argumentation": {
+      Distinction: "",
+      Competent: "Position → strongest reason → strongest counter → honest defence → scope of claim. Each part does work. Skipping any one weakens the whole case — especially the scope, which signals intellectual honesty.",
+      NotYetCompetent: "Write each part separately, then read them together. Does your defence actually answer the counter, or does it repeat your original reasoning? If it repeats, you haven't engaged — rewrite the defence.",
+    },
+    "Critical Thinking": {
+      Distinction: "",
+      Competent: "The counter-argument test: if someone you respect read your counter, would they say 'yes, that's the hardest objection'? If it's easier than that, you chose an easy one. Rewrite it.",
+      NotYetCompetent: "A strong counter-argument makes YOUR position harder, not easier, to defend. If you can knock it down with one sentence, it isn't the strongest objection. Go find one that makes you uncomfortable.",
     },
   },
   "prof-comm": {
     "Tone Appropriateness": {
-      strong: "",
-      developing: "Match the tone to the audience and the stakes. A client delay message isn't an internal Slack — it should be warmer than a memo and more accountable than a chat message.",
-      "needs-work": "Before you write, picture the reader opening your message. If they'd find it too casual or too stiff, adjust. For clients, aim for calm, direct, and professional — avoid exclamation marks, slang, or over-apology.",
+      Distinction: "",
+      Competent: "Match the tone to the audience and the stakes. A client delay message isn't an internal Slack — it should be warmer than a memo and more accountable than a chat message.",
+      NotYetCompetent: "Before you write, picture the reader opening your message. If they'd find it too casual or too stiff, adjust. For clients, aim for calm, direct, and professional — avoid exclamation marks, slang, or over-apology.",
     },
     "Message Clarity": {
-      strong: "",
-      developing: "Lead with the headline. The reader should know what the message is about in the first sentence — not the third.",
-      "needs-work": "Put the main point up top: what happened, what it means for them, what happens next. Don't bury the important information under context or caveats.",
+      Distinction: "",
+      Competent: "Lead with the headline. The reader should know what the message is about in the first sentence — not the third.",
+      NotYetCompetent: "Put the main point up top: what happened, what it means for them, what happens next. Don't bury the important information under context or caveats.",
     },
     "Relevance of Detail": {
-      strong: "",
-      developing: "Every sentence should earn its place. If a detail doesn't help the reader understand the situation or decide what to do, cut it.",
-      "needs-work": "Try this test: read your draft and delete any sentence that doesn't answer 'what happened', 'why it matters', or 'what next'. What's left is usually the message you should send.",
+      Distinction: "",
+      Competent: "Every sentence should earn its place. If a detail doesn't help the reader understand the situation or decide what to do, cut it.",
+      NotYetCompetent: "Try this test: read your draft and delete any sentence that doesn't answer 'what happened', 'why it matters', or 'what next'. What's left is usually the message you should send.",
     },
     "Register": {
-      strong: "",
-      developing: "Professional register isn't the same as formal register. It's about consistency — don't open with 'Dear Client' and close with 'cheers!' Pick a lane and stay in it.",
-      "needs-work": "Read your message aloud. If any phrase feels too casual (emoji, slang, contractions in a serious context) or too stiff (legalese, corporate jargon), rewrite it in plain professional English.",
+      Distinction: "",
+      Competent: "Professional register isn't the same as formal register. It's about consistency — don't open with 'Dear Client' and close with 'cheers!' Pick a lane and stay in it.",
+      NotYetCompetent: "Read your message aloud. If any phrase feels too casual (emoji, slang, contractions in a serious context) or too stiff (legalese, corporate jargon), rewrite it in plain professional English.",
     },
     "Adaptation": {
-      strong: "",
-      developing: "When the client reacts, your next message should feel like it heard them — not like it's reading from a script. Acknowledge what they said before moving on.",
-      "needs-work": "A good follow-up starts by naming what the reader just raised. Then answer it directly. Don't restate your original position — show you've absorbed their response and are responding to it.",
+      Distinction: "",
+      Competent: "When the client reacts, your next message should feel like it heard them — not like it's reading from a script. Acknowledge what they said before moving on.",
+      NotYetCompetent: "A good follow-up starts by naming what the reader just raised. Then answer it directly. Don't restate your original position — show you've absorbed their response and are responding to it.",
     },
   },
   interpersonal: {
     "Acknowledgement": {
-      strong: "",
-      developing: "Name the impact, not just the facts. 'That must have been frustrating' lands differently than 'I see the deadline was missed.'",
-      "needs-work": "Start your reply with their experience: 'I understand this made things difficult for you in front of your manager.' Only after that do you explain or propose next steps. Acknowledgement first, action second.",
+      Distinction: "",
+      Competent: "Name the impact, not just the facts. 'That must have been frustrating' lands differently than 'I see the deadline was missed.'",
+      NotYetCompetent: "Start your reply with their experience: 'I understand this made things difficult for you in front of your manager.' Only after that do you explain or propose next steps. Acknowledgement first, action second.",
     },
     "Tone Under Pressure": {
-      strong: "",
-      developing: "When someone pushes hard, match their seriousness but not their heat. Steady beats sharp — and it's what de-escalates.",
-      "needs-work": "If you feel defensive, pause before writing. Re-read your draft and cut any line that sounds like you're protecting yourself. A calm, even tone carries more authority than a sharp one.",
+      Distinction: "",
+      Competent: "When someone pushes hard, match their seriousness but not their heat. Steady beats sharp — and it's what de-escalates.",
+      NotYetCompetent: "If you feel defensive, pause before writing. Re-read your draft and cut any line that sounds like you're protecting yourself. A calm, even tone carries more authority than a sharp one.",
     },
     "De-escalation": {
-      strong: "",
-      developing: "De-escalation means taking heat out of the exchange — not ignoring the problem. Acknowledge, then move the conversation toward a solution.",
-      "needs-work": "Avoid three things that add heat: counter-accusations, over-explaining, and repeated apologies. Do one thing instead: name the issue, commit to a concrete change, propose a conversation.",
+      Distinction: "",
+      Competent: "De-escalation means taking heat out of the exchange — not ignoring the problem. Acknowledge, then move the conversation toward a solution.",
+      NotYetCompetent: "Avoid three things that add heat: counter-accusations, over-explaining, and repeated apologies. Do one thing instead: name the issue, commit to a concrete change, propose a conversation.",
     },
     "Proposed Resolution": {
-      strong: "",
-      developing: "Vague reassurances ('we'll try harder') sound dismissive. A concrete next step — even a small one — shows you've actually thought about it.",
-      "needs-work": "End with a specific commitment: a process change, a check-in, a 15-minute call. 'What can change' is the question you're really answering — make sure your reply answers it.",
+      Distinction: "",
+      Competent: "Vague reassurances ('we'll try harder') sound dismissive. A concrete next step — even a small one — shows you've actually thought about it.",
+      NotYetCompetent: "End with a specific commitment: a process change, a check-in, a 15-minute call. 'What can change' is the question you're really answering — make sure your reply answers it.",
     },
     "Register": {
-      strong: "",
-      developing: "A peer complaint needs a peer register — professional but not formal, honest but not casual. Match the level they chose.",
-      "needs-work": "Avoid going too stiff ('Dear colleague, I acknowledge receipt of your feedback') or too casual ('my bad, we'll sort it'). Aim for how you'd speak to them face-to-face if you were being thoughtful about it.",
+      Distinction: "",
+      Competent: "A peer complaint needs a peer register — professional but not formal, honest but not casual. Match the level they chose.",
+      NotYetCompetent: "Avoid going too stiff ('Dear colleague, I acknowledge receipt of your feedback') or too casual ('my bad, we'll sort it'). Aim for how you'd speak to them face-to-face if you were being thoughtful about it.",
     },
   },
 };
@@ -441,12 +610,11 @@ function buildLearnerFeedback(
   taskId: string,
   screenFeedback: ScreenFeedback[],
   dimensions: DimensionResult[],
-  overallBand: Band,
+  overallBand: ScoreLevel,
 ): LearnerFeedback {
-  // Find strongest dimension
-  const strongDims = dimensions.filter(d => d.band === "strong");
-  const weakDims = dimensions.filter(d => d.band === "needs-work");
-  const midDims = dimensions.filter(d => d.band === "developing");
+  const strongDims = dimensions.filter(d => d.band === "Distinction" || d.band === "Merit");
+  const weakDims = dimensions.filter(d => d.band === "NotYetCompetent");
+  const midDims = dimensions.filter(d => d.band === "Competent");
 
   // Strength callout
   const strength = strongDims.length > 0
@@ -468,7 +636,7 @@ function buildLearnerFeedback(
 
   // If no task-specific tips found, give generic advice
   if (focusAreas.length === 0) {
-    if (overallBand === "strong") {
+    if (overallBand === "Distinction" || overallBand === "Merit") {
       focusAreas.push("Review the per-screen feedback to find small refinements — even strong performers have areas to sharpen.");
     } else {
       focusAreas.push("Look at the screens where you scored lowest and read the 'Better option' hints carefully. Understanding why the better option works is more valuable than memorising it.");
@@ -476,11 +644,11 @@ function buildLearnerFeedback(
   }
 
   // Next step
-  const nextStep = overallBand === "strong"
+  const nextStep = overallBand === "Distinction" || overallBand === "Merit"
     ? "Try the task again and challenge yourself to justify every choice in one sentence — this builds the habit of clear reasoning under pressure."
-    : overallBand === "developing"
+    : overallBand === "Competent"
     ? "Pick your weakest dimension from above and try the task again, focusing specifically on that area. Targeted practice is more effective than repeating everything."
-    : "Start by re-reading the feedback on the screens marked 'Needs work.' For each one, think about what you would do differently, then try the task again.";
+    : "Start by re-reading the feedback on the screens marked 'Not Yet Competent.' For each one, think about what you would do differently, then try the task again.";
 
   return { strength, focusAreas, nextStep };
 }

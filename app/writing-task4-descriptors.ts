@@ -36,7 +36,6 @@ export type CefrLevel =
   | "B2" | "B2_PLUS" | "C1";
 
 export type FunctionType = "Mediating";
-export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
 export type ChallengeType = "simplify" | "formalise" | "audience" | "tone";
 
 export interface GseMicro {

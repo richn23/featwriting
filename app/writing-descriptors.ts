@@ -28,8 +28,6 @@ export type CefrLevel =
 
 export type FunctionType = "Interactional" | "Informing";
 
-export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
-
 export interface GseMicro {
   id: string;
   gse: number;

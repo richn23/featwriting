@@ -2,7 +2,8 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import type { ScenarioTaskDef, Screen } from "./scenario-types";
-import { scoreTask, bandLabel, type TaskReport, type Band } from "./scenario-scoring";
+import { scoreTask, bandLabel, type TaskReport } from "./scenario-scoring";
+import type { ScoreLevel, Outcome } from "./scoreLevel";
 
 // ─── Word counter ──────────────────────────────────────────────
 function wordCount(text: string): number {
@@ -102,7 +103,12 @@ export function ScenarioTask({ task }: Props) {
   // ─── RESULTS ──────────────────────────────────────────────────
   if (phase === "results") {
     const report = scoreTask(task, answers);
-    const bandColor = (b: Band) => b === "strong" ? "#34d399" : b === "developing" ? "#fbbf24" : "#f87171";
+    const bandColor = (b: Outcome) =>
+      b === "Distinction" ? "#34d399"
+      : b === "Merit" ? "#a7f3d0"
+      : b === "Competent" ? "#fbbf24"
+      : b === "InsufficientEvidence" ? "#94a3b8"
+      : "#f87171";
 
     return wrap(
       <main className="sc-results-page">
@@ -133,11 +139,43 @@ export function ScenarioTask({ task }: Props) {
           <div className="sc-overall-band-value" style={{ color: bandColor(report.overallBand) }}>
             {bandLabel(report.overallBand)}
           </div>
-          <div className="sc-overall-band-bar">
-            <div className="sc-overall-band-fill" style={{ width: `${Math.round(report.overallScore * 100)}%`, background: bandColor(report.overallBand) }} />
-          </div>
-          <div className="sc-overall-band-pct">{Math.round(report.overallScore * 100)}%</div>
+          {report.overallBand !== "InsufficientEvidence" && (
+            <>
+              <div className="sc-overall-band-bar">
+                <div className="sc-overall-band-fill" style={{ width: `${Math.round(report.overallScore * 100)}%`, background: bandColor(report.overallBand) }} />
+              </div>
+              <div className="sc-overall-band-pct">{Math.round(report.overallScore * 100)}%</div>
+            </>
+          )}
         </div>
+
+        {/* Reviewer flag banner — academic tasks only */}
+        {report.reviewerFlag && report.flagReason && (
+          <div
+            className="sc-reviewer-flag animate-fade-up"
+            role="status"
+            style={{
+              animationDelay: "85ms",
+              margin: "0 auto 20px",
+              maxWidth: 720,
+              padding: "14px 18px",
+              background: "rgba(251, 191, 36, 0.08)",
+              border: "1px solid rgba(251, 191, 36, 0.35)",
+              borderRadius: 12,
+              display: "flex",
+              gap: 12,
+              fontSize: ".85rem",
+              color: "var(--s-text)",
+              lineHeight: 1.55,
+            }}
+          >
+            <div style={{ flexShrink: 0, fontSize: "1rem" }} aria-hidden="true">⚑</div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 2 }}>Reviewer attention recommended</div>
+              <div style={{ color: "var(--s-text-muted)" }}>{report.flagReason}</div>
+            </div>
+          </div>
+        )}
 
         {/* Learner feedback */}
         <div className="sc-learner-feedback animate-fade-up" style={{ animationDelay: "90ms" }}>

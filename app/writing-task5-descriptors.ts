@@ -24,7 +24,6 @@ export type CefrLevel =
   | "B2" | "B2_PLUS" | "C1";
 
 export type FunctionType = "Mediating" | "Informing" | "Directing";
-export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
 
 export interface CardFeature {
   icon: string;

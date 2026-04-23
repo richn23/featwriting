@@ -31,6 +31,8 @@ export type ChoiceScreen = {
   requireJustification: boolean;
   justificationPrompt?: string;
   justificationMax?: number;
+  /** Academic: which of the four construct dimensions this screen feeds into. */
+  dimension?: string;
 };
 
 export type MultiSelectScreen = {
@@ -43,6 +45,8 @@ export type MultiSelectScreen = {
   requireJustification: boolean;
   justificationPrompt?: string;
   justificationMax?: number;
+  /** Academic: which of the four construct dimensions this screen feeds into. */
+  dimension?: string;
 };
 
 export type ShortTextScreen = {
@@ -52,6 +56,8 @@ export type ShortTextScreen = {
   constraints?: string[];   // bullet-style constraints shown to user
   maxWords: number;
   scoringHints: string[];   // what good answers include (for results)
+  /** Academic: which of the four construct dimensions this screen feeds into. */
+  dimension?: string;
 };
 
 export type RankScreen = {
@@ -63,6 +69,8 @@ export type RankScreen = {
   requireJustification: boolean;
   justificationPrompt?: string;
   justificationMax?: number;
+  /** Academic: which of the four construct dimensions this screen feeds into. */
+  dimension?: string;
 };
 
 export type UpdateScreen = {
@@ -80,6 +88,8 @@ export type EvidenceSelectScreen = {
   options: { id: string; text: string; quality: "strong" | "weak" | "irrelevant" | "misleading" }[];
   requireJustification: boolean;
   justificationPrompt?: string;
+  /** Academic: which of the four construct dimensions this screen feeds into. */
+  dimension?: string;
 };
 
 export type Screen =
@@ -98,4 +108,9 @@ export type ScenarioTaskDef = {
   accentColor: string;    // CSS color for accents
   screens: Screen[];
   scoringDimensions: { name: string; description: string }[];
+  /** Which FEAT product line this task belongs to. Academic tasks apply
+   *  construct gate logic (Task Achievement validity gate, Critical Thinking
+   *  upper gate, Insufficient Evidence off-scale). Default "beyond" keeps
+   *  existing round-robin scoring for legacy scenario tasks. */
+  productLine?: "academic" | "professional" | "beyond";
 };

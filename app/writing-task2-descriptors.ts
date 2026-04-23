@@ -24,7 +24,6 @@ export type CefrLevel =
   | "B2" | "B2_PLUS" | "C1";
 
 export type FunctionType = "Informing" | "Narrating";
-export type MacroVerdict = "CAN" | "NOT_YET" | "NOT_TESTED";
 export type TopicCategory = "personal_experiences" | "everyday_life" | "events";
 
 export interface GseMicro {
